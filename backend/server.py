@@ -530,14 +530,25 @@ async def refresh_articles(request: Request):
         try:
             parsed = feedparser.parse(feed["url"])
             
+            # Collect all entry links for this feed first
+            entry_links = [entry.get("link") for entry in parsed.entries[:20] if entry.get("link")]
+            
+            # Batch query: Get all existing articles with these links in one query
+            existing_docs = await db.articles.find(
+                {"link": {"$in": entry_links}},
+                {"link": 1}
+            ).to_list(None)
+            existing_links = {doc["link"] for doc in existing_docs}
+            
             for entry in parsed.entries[:20]:  # Limit to 20 per feed
+                link = entry.get("link", "")
+                
+                # Skip if article already exists (O(1) lookup instead of database query)
+                if link in existing_links:
+                    continue
+                
                 # Generate unique article ID based on link
                 article_id = f"art_{uuid.uuid4().hex[:12]}"
-                
-                # Check if article already exists
-                existing = await db.articles.find_one({"link": entry.get("link")})
-                if existing:
-                    continue
                 
                 # Parse publication date
                 pub_date = None
@@ -573,7 +584,7 @@ async def refresh_articles(request: Request):
                     "title": entry.get("title", "No title"),
                     "description": description[:500] if description else None,
                     "content": content,
-                    "link": entry.get("link", ""),
+                    "link": link,
                     "image_url": image_url,
                     "pub_date": pub_date,
                     "created_at": datetime.now(timezone.utc)

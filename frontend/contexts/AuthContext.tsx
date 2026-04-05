@@ -179,8 +179,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const loginWithGoogle = () => {
-    // Use window.location.origin for correct redirect URL across all environments
-    const redirectUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/auth-callback`;
+    // Use window.location.origin directly for correct redirect URL across all environments
+    const redirectUrl = window.location.origin + '/auth-callback';
     const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
     return authUrl;
   };
