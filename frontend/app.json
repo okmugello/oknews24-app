@@ -39,9 +39,6 @@
     ],
     "experiments": {
       "typedRoutes": true
-    },
-    "extra": {
-      "backendUrl": "https://oknews24-app.preview.emergentagent.com"
     }
   }
 }

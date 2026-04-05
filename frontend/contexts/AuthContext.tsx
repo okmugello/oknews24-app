@@ -1,10 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
-import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
-const API_URL = Constants.expoConfig?.extra?.backendUrl || process.env.EXPO_PUBLIC_BACKEND_URL || '';
+const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
 interface User {
   user_id: string;
@@ -180,8 +179,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const loginWithGoogle = () => {
-    // For mobile, we'll handle this differently - open a web browser
-    const redirectUrl = `${API_URL}/auth-callback`;
+    // Use window.location.origin for correct redirect URL across all environments
+    const redirectUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/auth-callback`;
     const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
     return authUrl;
   };
