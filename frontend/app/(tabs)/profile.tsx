@@ -139,6 +139,19 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* User Preferences */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Preferenze</Text>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => router.push('/(tabs)/feed-preferences' as any)}
+          >
+            <Ionicons name="newspaper-outline" size={24} color="#4B5563" />
+            <Text style={styles.menuItemText}>Gestione Feed</Text>
+            <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+          </TouchableOpacity>
+        </View>
+
         {/* Admin Menu */}
         {user?.role === 'admin' && (
           <View style={styles.section}>

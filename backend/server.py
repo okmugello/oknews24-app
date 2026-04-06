@@ -68,6 +68,8 @@ class User(BaseModel):
     articles_read: int = 0
     subscription_status: str = "trial"  # trial, monthly, yearly, expired
     subscription_end_date: Optional[datetime] = None
+    enabled_feeds: List[str] = []  # List of enabled feed_ids (empty = all enabled)
+    favorite_feed: Optional[str] = None  # Preferred feed_id for default view
     created_at: datetime
 
 class UserUpdate(BaseModel):
@@ -75,6 +77,10 @@ class UserUpdate(BaseModel):
     role: Optional[str] = None
     subscription_status: Optional[str] = None
     subscription_end_date: Optional[datetime] = None
+
+class UserFeedPreferences(BaseModel):
+    enabled_feeds: List[str]  # List of feed_ids to enable
+    favorite_feed: Optional[str] = None  # Preferred feed_id
 
 class RssFeedCreate(BaseModel):
     name: str
@@ -386,6 +392,62 @@ async def logout(request: Request, response: Response):
         samesite="none"
     )
     return {"message": "Logged out"}
+
+# ============== USER FEED PREFERENCES ==============
+
+@api_router.get("/user/feed-preferences")
+async def get_feed_preferences(request: Request):
+    """Get current user's feed preferences"""
+    user = await require_auth(request)
+    
+    # Get all available feeds
+    all_feeds = await db.feeds.find({"active": True}, {"_id": 0}).to_list(100)
+    
+    # Get user's preferences from database
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    
+    enabled_feeds = user_doc.get("enabled_feeds", [])
+    favorite_feed = user_doc.get("favorite_feed", None)
+    
+    # If no enabled_feeds set, all are enabled by default
+    if not enabled_feeds:
+        enabled_feeds = [f["feed_id"] for f in all_feeds]
+    
+    return {
+        "all_feeds": all_feeds,
+        "enabled_feeds": enabled_feeds,
+        "favorite_feed": favorite_feed
+    }
+
+@api_router.put("/user/feed-preferences")
+async def update_feed_preferences(prefs: UserFeedPreferences, request: Request):
+    """Update current user's feed preferences"""
+    user = await require_auth(request)
+    
+    # Validate that all feed_ids exist
+    all_feeds = await db.feeds.find({"active": True}, {"_id": 0}).to_list(100)
+    valid_feed_ids = {f["feed_id"] for f in all_feeds}
+    
+    # Filter out invalid feed_ids
+    enabled_feeds = [fid for fid in prefs.enabled_feeds if fid in valid_feed_ids]
+    
+    # Validate favorite_feed
+    favorite_feed = prefs.favorite_feed if prefs.favorite_feed in valid_feed_ids else None
+    
+    # Update user preferences
+    await db.users.update_one(
+        {"user_id": user.user_id},
+        {"$set": {
+            "enabled_feeds": enabled_feeds,
+            "favorite_feed": favorite_feed
+        }}
+    )
+    
+    return {
+        "message": "Feed preferences updated",
+        "enabled_feeds": enabled_feeds,
+        "favorite_feed": favorite_feed
+    }
 
 # ============== RSS FEED ENDPOINTS ==============
 

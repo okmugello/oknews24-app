@@ -6,7 +6,8 @@ import {
   FlatList,
   RefreshControl,
   TouchableOpacity,
-  Alert
+  Alert,
+  Image
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -15,16 +16,37 @@ import { useAuth } from '../../contexts/AuthContext';
 import ArticleCard from '../../components/ArticleCard';
 import SubscriptionBanner from '../../components/SubscriptionBanner';
 import LoadingSpinner from '../../components/LoadingSpinner';
-import { getArticles, getFeeds, Article, Feed, refreshArticles } from '../../services/api';
+import { getArticles, getFeeds, Article, Feed, refreshArticles, getFeedPreferences } from '../../services/api';
 
 export default function HomeScreen() {
   const router = useRouter();
   const { user, refreshUser } = useAuth();
   const [articles, setArticles] = useState<Article[]>([]);
   const [feeds, setFeeds] = useState<Feed[]>([]);
+  const [enabledFeeds, setEnabledFeeds] = useState<string[]>([]);
+  const [favoriteFeed, setFavoriteFeed] = useState<string | null>(null);
   const [selectedFeed, setSelectedFeed] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
+
+  // Load user preferences
+  const loadPreferences = useCallback(async () => {
+    if (!user) return;
+    try {
+      const response = await getFeedPreferences();
+      setEnabledFeeds(response.data.enabled_feeds);
+      setFavoriteFeed(response.data.favorite_feed);
+      // Set favorite feed as default selection if not already selected
+      if (!preferencesLoaded && response.data.favorite_feed) {
+        setSelectedFeed(response.data.favorite_feed);
+      }
+      setPreferencesLoaded(true);
+    } catch (error) {
+      console.log('Could not load feed preferences:', error);
+      setPreferencesLoaded(true);
+    }
+  }, [user, preferencesLoaded]);
 
   const loadData = useCallback(async () => {
     try {
@@ -41,6 +63,10 @@ export default function HomeScreen() {
       setIsRefreshing(false);
     }
   }, [selectedFeed]);
+
+  useEffect(() => {
+    loadPreferences();
+  }, [loadPreferences]);
 
   useEffect(() => {
     loadData();
@@ -63,21 +89,37 @@ export default function HomeScreen() {
     router.push(`/article/${article.article_id}`);
   };
 
+  // Filter feeds based on user preferences
+  const visibleFeeds = enabledFeeds.length > 0 
+    ? feeds.filter(f => enabledFeeds.includes(f.feed_id))
+    : feeds;
+
+  // Sort feeds to put favorite first
+  const sortedFeeds = [...visibleFeeds].sort((a, b) => {
+    if (a.feed_id === favoriteFeed) return -1;
+    if (b.feed_id === favoriteFeed) return 1;
+    return 0;
+  });
+
   const renderFeedFilter = () => (
     <View style={styles.filterContainer}>
       <FlatList
         horizontal
         showsHorizontalScrollIndicator={false}
-        data={[{ feed_id: null, name: 'Tutte' }, ...feeds]}
+        data={[{ feed_id: null, name: 'Tutte' }, ...sortedFeeds]}
         keyExtractor={(item) => item.feed_id || 'all'}
         renderItem={({ item }) => (
           <TouchableOpacity
             style={[
               styles.filterChip,
-              (selectedFeed === item.feed_id || (!selectedFeed && !item.feed_id)) && styles.filterChipActive
+              (selectedFeed === item.feed_id || (!selectedFeed && !item.feed_id)) && styles.filterChipActive,
+              item.feed_id === favoriteFeed && styles.filterChipFavorite
             ]}
             onPress={() => setSelectedFeed(item.feed_id)}
           >
+            {item.feed_id === favoriteFeed && (
+              <Ionicons name="star" size={12} color="#F59E0B" style={{ marginRight: 4 }} />
+            )}
             <Text
               style={[
                 styles.filterChipText,
@@ -97,10 +139,11 @@ export default function HomeScreen() {
     <View>
       <View style={styles.header}>
         <View style={styles.headerContent}>
-          <View style={styles.logoSmall}>
-            <Text style={styles.logoSmallText}>OK</Text>
-          </View>
-          <Text style={styles.headerTitle}>OKNews24</Text>
+          <Image 
+            source={require('../../assets/images/oknews24-logo.png')} 
+            style={styles.logo}
+            resizeMode="contain"
+          />
         </View>
         {user?.role === 'admin' && (
           <TouchableOpacity
@@ -180,24 +223,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center'
   },
-  logoSmall: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#3B82F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10
-  },
-  logoSmallText: {
-    fontSize: 14,
-    fontWeight: '900',
-    color: '#FFFFFF'
-  },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#1F2937'
+  logo: {
+    width: 140,
+    height: 40
   },
   refreshButton: {
     padding: 8
@@ -212,6 +240,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12
   },
   filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
@@ -220,6 +250,10 @@ const styles = StyleSheet.create({
   },
   filterChipActive: {
     backgroundColor: '#3B82F6'
+  },
+  filterChipFavorite: {
+    borderWidth: 1,
+    borderColor: '#F59E0B'
   },
   filterChipText: {
     fontSize: 14,

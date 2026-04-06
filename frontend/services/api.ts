@@ -94,6 +94,18 @@ export const subscribe = (planType: string) =>
 
 export const getMySubscription = () => api.get('/subscriptions/my');
 
+// Feed Preferences
+export interface FeedPreferences {
+  all_feeds: Feed[];
+  enabled_feeds: string[];
+  favorite_feed: string | null;
+}
+
+export const getFeedPreferences = () => api.get<FeedPreferences>('/user/feed-preferences');
+
+export const updateFeedPreferences = (data: { enabled_feeds: string[]; favorite_feed?: string | null }) =>
+  api.put('/user/feed-preferences', data);
+
 export const getAdminUsers = (search?: string, limit?: number, skip?: number) => {
   const params: any = {};
   if (search) params.search = search;
