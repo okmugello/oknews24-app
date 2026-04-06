@@ -25,6 +25,9 @@
       },
       "android": {
         "autoIncrement": true
+      },
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://oknews24-backend.onrender.com"
       }
     }
   },
