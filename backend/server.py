@@ -129,6 +129,15 @@ class AdminUserCreate(BaseModel):
     password: str
     subscription_plan: str = "monthly"  # monthly, yearly, trial
 
+class PushTokenRegister(BaseModel):
+    push_token: str
+
+class GoogleAuthRequest(BaseModel):
+    id_token: str
+    email: str
+    name: Optional[str] = None
+    picture: Optional[str] = None
+
 class Subscription(BaseModel):
     subscription_id: str
     user_id: str
@@ -1285,6 +1294,164 @@ async def deduplicate_articles(request: Request):
         pass  # Index might already exist
     
     return {"message": f"Removed {removed} duplicate articles"}
+
+# ==================== Push Notifications ====================
+
+@api_router.post("/notifications/register")
+async def register_push_token(data: PushTokenRegister, request: Request):
+    """Register an Expo push token for the current user"""
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Store token linked to user
+    await db.push_tokens.update_one(
+        {"user_id": user.user_id},
+        {"$set": {
+            "user_id": user.user_id,
+            "push_token": data.push_token,
+            "updated_at": datetime.now(timezone.utc)
+        }},
+        upsert=True
+    )
+    return {"message": "Push token registered"}
+
+@api_router.post("/notifications/unregister")
+async def unregister_push_token(data: PushTokenRegister, request: Request):
+    """Unregister a push token"""
+    await db.push_tokens.delete_many({"push_token": data.push_token})
+    return {"message": "Push token unregistered"}
+
+@api_router.post("/notifications/send")
+async def send_push_notification(request: Request):
+    """Send push notification to all registered users about new articles (admin only)"""
+    admin = await require_admin(request)
+    
+    body = await request.json()
+    title = body.get("title", "OKNews24")
+    message = body.get("message", "Nuovi articoli disponibili!")
+    
+    # Get all registered push tokens
+    tokens_docs = await db.push_tokens.find({}, {"push_token": 1, "_id": 0}).to_list(None)
+    tokens = [doc["push_token"] for doc in tokens_docs if doc.get("push_token")]
+    
+    if not tokens:
+        return {"message": "No registered devices", "sent": 0}
+    
+    # Send via Expo Push API
+    sent = 0
+    failed = 0
+    
+    # Batch tokens (max 100 per request)
+    for i in range(0, len(tokens), 100):
+        batch = tokens[i:i+100]
+        messages = [
+            {
+                "to": token,
+                "sound": "default",
+                "title": title,
+                "body": message,
+                "data": {"type": "new_articles"}
+            }
+            for token in batch
+        ]
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    "https://exp.host/--/api/v2/push/send",
+                    json=messages,
+                    headers={"Content-Type": "application/json"}
+                )
+                if response.status_code == 200:
+                    sent += len(batch)
+                else:
+                    failed += len(batch)
+        except Exception as e:
+            logger.error(f"Error sending push notifications: {e}")
+            failed += len(batch)
+    
+    return {"message": f"Sent {sent} notifications, {failed} failed", "sent": sent, "failed": failed}
+
+@api_router.get("/notifications/settings")
+async def get_notification_settings(request: Request):
+    """Get push notification settings for the current user"""
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    token_doc = await db.push_tokens.find_one({"user_id": user.user_id}, {"_id": 0})
+    return {
+        "enabled": token_doc is not None,
+        "push_token": token_doc.get("push_token") if token_doc else None
+    }
+
+# ==================== Google OAuth ====================
+
+@api_router.post("/auth/google")
+async def google_auth(data: GoogleAuthRequest, response: Response):
+    """Authenticate user via Google OAuth"""
+    email = data.email.lower()
+    name = data.name or email.split("@")[0]
+    picture = data.picture
+    
+    # Check if user exists
+    existing_user = await db.users.find_one({"email": email}, {"_id": 0})
+    
+    if existing_user:
+        # Update picture if changed
+        if picture and picture != existing_user.get("picture"):
+            await db.users.update_one(
+                {"email": email},
+                {"$set": {"picture": picture}}
+            )
+        user_data = existing_user
+    else:
+        # Create new user with trial
+        user_id = f"user_{uuid.uuid4().hex[:12]}"
+        user_data = {
+            "user_id": user_id,
+            "email": email,
+            "name": name,
+            "password_hash": None,  # Google users don't have password
+            "picture": picture,
+            "role": "user",
+            "articles_read": 0,
+            "subscription_status": "trial",
+            "subscription_end_date": None,
+            "created_at": datetime.now(timezone.utc)
+        }
+        await db.users.insert_one(user_data)
+    
+    # Create session
+    session_id = f"session_{uuid.uuid4().hex}"
+    await db.user_sessions.update_one(
+        {"user_id": user_data["user_id"]},
+        {"$set": {
+            "session_token": session_id,
+            "user_id": user_data["user_id"],
+            "expires_at": datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRATION_DAYS),
+            "created_at": datetime.now(timezone.utc)
+        }},
+        upsert=True
+    )
+    
+    # Set session cookie
+    response.set_cookie(
+        key="session_token",
+        value=session_id,
+        httponly=True,
+        max_age=604800,
+        samesite="none",
+        secure=True,
+        path="/"
+    )
+    
+    # Remove sensitive fields
+    user_data.pop("password_hash", None)
+    user_data.pop("_id", None)
+    
+    return user_data
 
 # ============== INITIALIZATION ==============
 

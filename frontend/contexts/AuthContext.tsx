@@ -22,8 +22,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, name: string, password: string) => Promise<void>;
-  loginWithGoogle: () => void;
-  processGoogleSession: (sessionId: string) => Promise<void>;
+  loginWithGoogle: (googleData: { email: string; name?: string; picture?: string; id_token: string }) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -177,31 +176,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(userData);
   };
 
-  const loginWithGoogle = () => {
-    // Use window.location.origin directly for correct redirect URL across all environments
-    const redirectUrl = window.location.origin + '/auth-callback';
-    const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
-    return authUrl;
-  };
+  const loginWithGoogle = async (googleData: { email: string; name?: string; picture?: string; id_token: string }) => {
+    console.log('Processing Google login for:', googleData.email);
+    
+    const response = await axios.post(`${API_URL}/api/auth/google`, {
+      email: googleData.email,
+      name: googleData.name,
+      picture: googleData.picture,
+      id_token: googleData.id_token
+    });
 
-  const processGoogleSession = async (sessionId: string) => {
-    try {
-      const response = await axios.post(`${API_URL}/api/auth/session`, {
-        session_id: sessionId
-      });
-
-      const userData = response.data;
-      const token = `session_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-      
-      await storage.setItem('user_data', JSON.stringify(userData));
-      await storage.setItem('session_token', token);
-      
-      setSessionToken(token);
-      setUser(userData);
-    } catch (error) {
-      console.error('Google session processing failed:', error);
-      throw error;
-    }
+    const userData = response.data;
+    const newSessionToken = `session_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    
+    await storage.setItem('user_data', JSON.stringify(userData));
+    await storage.setItem('session_token', newSessionToken);
+    
+    setSessionToken(newSessionToken);
+    setUser(userData);
+    
+    console.log('Google login successful');
   };
 
   const logout = async () => {
@@ -255,7 +249,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         register,
         loginWithGoogle,
-        processGoogleSession,
         logout,
         refreshUser
       }}

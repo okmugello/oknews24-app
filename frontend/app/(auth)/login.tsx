@@ -13,8 +13,17 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as WebBrowser from 'expo-web-browser';
+import * as Google from 'expo-auth-session/providers/google';
 import { useAuth } from '../../contexts/AuthContext';
 import LoadingSpinner from '../../components/LoadingSpinner';
+
+WebBrowser.maybeCompleteAuthSession();
+
+// Google OAuth Client IDs - user will need to provide these for production
+const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '';
+const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '';
+const GOOGLE_ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || '';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -23,6 +32,49 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    webClientId: GOOGLE_WEB_CLIENT_ID || undefined,
+    iosClientId: GOOGLE_IOS_CLIENT_ID || undefined,
+    androidClientId: GOOGLE_ANDROID_CLIENT_ID || undefined,
+  });
+
+  // Handle Google response
+  React.useEffect(() => {
+    if (response?.type === 'success' && response.authentication) {
+      handleGoogleResponse(response.authentication.accessToken);
+    } else if (response?.type === 'error') {
+      setIsGoogleLoading(false);
+      Alert.alert('Errore', 'Login con Google fallito');
+    }
+  }, [response]);
+
+  const handleGoogleResponse = async (accessToken: string) => {
+    try {
+      setIsGoogleLoading(true);
+      // Fetch user info from Google
+      const userInfoResponse = await fetch('https://www.googleapis.com/userinfo/v2/me', {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const userInfo = await userInfoResponse.json();
+      
+      // Login with our backend
+      await loginWithGoogle({
+        email: userInfo.email,
+        name: userInfo.name,
+        picture: userInfo.picture,
+        id_token: accessToken
+      });
+      
+      router.replace('/(tabs)' as Href);
+    } catch (error: any) {
+      console.log('Google login error:', error);
+      Alert.alert('Errore', 'Login con Google fallito. Riprova.');
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -34,7 +86,6 @@ export default function LoginScreen() {
     try {
       await login(email, password);
       console.log('Login completed successfully');
-      // Navigate to the tabs - the auth state is already updated
       router.replace('/(tabs)' as Href);
     } catch (error: any) {
       console.log('Login error:', error);
@@ -47,11 +98,15 @@ export default function LoginScreen() {
   };
 
   const handleGoogleLogin = () => {
-    // For now, show a message that Google login is available
-    Alert.alert(
-      'Google Login',
-      'Il login con Google sarà disponibile nella versione mobile completa.'
-    );
+    if (!GOOGLE_WEB_CLIENT_ID && !GOOGLE_IOS_CLIENT_ID && !GOOGLE_ANDROID_CLIENT_ID) {
+      Alert.alert(
+        'Google OAuth',
+        'Per abilitare il login con Google, configura i Google Client IDs nel file .env:\n\nEXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID\nEXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID\nEXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID\n\nOttienili dalla Google Cloud Console.'
+      );
+      return;
+    }
+    setIsGoogleLoading(true);
+    promptAsync();
   };
 
   return (
@@ -135,9 +190,16 @@ export default function LoginScreen() {
             <TouchableOpacity
               style={styles.googleButton}
               onPress={handleGoogleLogin}
+              disabled={isGoogleLoading}
             >
-              <Ionicons name="logo-google" size={20} color="#DB4437" />
-              <Text style={styles.googleButtonText}>Continua con Google</Text>
+              {isGoogleLoading ? (
+                <LoadingSpinner />
+              ) : (
+                <>
+                  <Ionicons name="logo-google" size={20} color="#DB4437" />
+                  <Text style={styles.googleButtonText}>Continua con Google</Text>
+                </>
+              )}
             </TouchableOpacity>
 
             <View style={styles.registerContainer}>

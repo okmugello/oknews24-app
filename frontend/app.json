@@ -10,7 +10,17 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.oknews24.app"
+      "bundleIdentifier": "com.oknews24.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Scatta foto per il tuo profilo",
+        "NSPhotoLibraryUsageDescription": "Seleziona foto per il tuo profilo",
+        "UIBackgroundModes": ["remote-notification"]
+      },
+      "config": {
+        "googleSignIn": {
+          "reservedClientId": "com.googleusercontent.apps.YOUR_IOS_CLIENT_ID"
+        }
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +28,15 @@
         "backgroundColor": "#3B82F6"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.oknews24.app"
+      "package": "com.oknews24.app",
+      "permissions": [
+        "INTERNET",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "WAKE_LOCK",
+        "SCHEDULE_EXACT_ALARM"
+      ],
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "bundler": "metro",
@@ -35,10 +53,22 @@
           "resizeMode": "contain",
           "backgroundColor": "#3B82F6"
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#3B82F6"
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "your-eas-project-id"
+      }
     }
   }
 }
