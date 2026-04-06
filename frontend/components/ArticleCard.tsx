@@ -101,9 +101,17 @@ export default function ArticleCard({ article, onPress, showRemove, onRemove }: 
           </Text>
         )}
         <View style={styles.footer}>
-          <View style={styles.dateContainer}>
-            <Ionicons name="time-outline" size={14} color={colors.textTertiary} />
-            <Text style={[styles.date, { color: colors.textTertiary }]}>{formatDate(article.pub_date)}</Text>
+          <View style={styles.footerLeft}>
+            {article.author && (
+              <View style={styles.authorContainer}>
+                <Ionicons name="person-outline" size={12} color={colors.textTertiary} />
+                <Text style={[styles.authorText, { color: colors.textTertiary }]} numberOfLines={1}>{article.author}</Text>
+              </View>
+            )}
+            <View style={styles.dateContainer}>
+              <Ionicons name="time-outline" size={14} color={colors.textTertiary} />
+              <Text style={[styles.date, { color: colors.textTertiary }]}>{formatDate(article.pub_date)}</Text>
+            </View>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.primary} />
         </View>
@@ -191,6 +199,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center'
+  },
+  footerLeft: {
+    flex: 1,
+    marginRight: 8
+  },
+  authorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 4
+  },
+  authorText: {
+    fontSize: 12,
+    fontWeight: '500',
+    flex: 1
   },
   dateContainer: {
     flexDirection: 'row',

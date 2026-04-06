@@ -26,6 +26,7 @@ export interface Article {
   content?: string;
   link: string;
   image_url?: string;
+  author?: string;
   pub_date?: string;
   created_at: string;
 }
@@ -128,6 +129,11 @@ export const updateUser = (userId: string, data: Partial<User>) =>
   api.put<User>(`/admin/users/${userId}`, data);
 
 export const deleteUser = (userId: string) => api.delete(`/admin/users/${userId}`);
+
+export const adminCreateUser = (data: { email: string; name: string; password: string; subscription_plan: string }) =>
+  api.post('/admin/users/create', data);
+
+export const deduplicateArticles = () => api.post('/admin/articles/deduplicate');
 
 export const getAdminStats = () => api.get('/admin/stats');
 

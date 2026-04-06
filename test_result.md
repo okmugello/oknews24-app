@@ -16,6 +16,54 @@
 # 
 ## user_problem_statement: {problem_statement}
 ## backend:
+##   - task: "Article deduplication on refresh"
+##     implemented: true
+##     working: "NA"
+##     file: "server.py"
+##     stuck_count: 0
+##     priority: "high"
+##     needs_retesting: true
+##     status_history:
+##         -working: "NA"
+##         -agent: "main"
+##         -comment: "Added duplicate check by link + title/feed, unique DB index, and URL normalization"
+##
+##   - task: "Author extraction from RSS feeds"
+##     implemented: true
+##     working: "NA"
+##     file: "server.py"
+##     stuck_count: 0
+##     priority: "high"
+##     needs_retesting: true
+##     status_history:
+##         -working: "NA"
+##         -agent: "main"
+##         -comment: "Added author field parsing from RSS entry author, author_detail, authors and dc_creator"
+##
+##   - task: "Admin create subscribed user endpoint"
+##     implemented: true
+##     working: "NA"
+##     file: "server.py"
+##     stuck_count: 0
+##     priority: "high"
+##     needs_retesting: true
+##     status_history:
+##         -working: "NA"
+##         -agent: "main"
+##         -comment: "POST /api/admin/users/create - creates user with monthly/yearly subscription"
+##
+##   - task: "Admin deduplicate articles endpoint"
+##     implemented: true
+##     working: "NA"
+##     file: "server.py"
+##     stuck_count: 0
+##     priority: "medium"
+##     needs_retesting: true
+##     status_history:
+##         -working: "NA"
+##         -agent: "main"
+##         -comment: "POST /api/admin/articles/deduplicate - removes duplicate articles and creates unique index"
+##
 ##   - task: "Task name"
 ##     implemented: true
 ##     working: true  # or false or "NA"
@@ -101,3 +149,134 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: "Test the OKNews24 backend API endpoints including auth, article refresh, user creation, and deduplication features"
+
+backend:
+  - task: "Admin authentication login"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "POST /api/auth/login working correctly with admin credentials (admin@oknews24.com/admin123). Returns session token and user data."
+
+  - task: "Initial setup endpoint"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "POST /api/init/setup working correctly. Initializes feeds and admin user, handles already initialized state."
+
+  - task: "Article refresh from RSS feeds"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "POST /api/articles/refresh working correctly. Fetches new articles, prevents duplicates on subsequent calls. Requires admin auth."
+
+  - task: "Article deduplication on refresh"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "Duplicate prevention working correctly. Second refresh returns 0 new articles, indicating proper duplicate detection."
+
+  - task: "Author extraction from RSS feeds"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "Author field present in articles. Found articles with author information extracted from RSS feeds."
+
+  - task: "Get articles endpoint with author field"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "GET /api/articles working correctly. Returns articles with author field, no duplicate links found after deduplication."
+
+  - task: "Admin create subscribed user endpoint"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "POST /api/admin/users/create working correctly. Creates users with subscription plans, prevents duplicate emails."
+
+  - task: "Admin deduplicate articles endpoint"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "POST /api/admin/articles/deduplicate working correctly. Removes duplicate articles and creates unique index."
+
+  - task: "Bearer token authentication"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "Bearer token authentication working correctly. Admin endpoints properly protected and accessible with valid token."
+
+frontend:
+  # No frontend testing performed as per instructions
+
+metadata:
+  created_by: "testing_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "All backend API endpoints tested successfully"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    -agent: "testing"
+    -message: "Completed comprehensive backend API testing. All endpoints working correctly. Admin auth, article refresh, user creation, and deduplication features all functional. No critical issues found."

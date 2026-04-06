@@ -7,7 +7,9 @@ import {
   TouchableOpacity,
   Image,
   Linking,
-  Alert
+  Alert,
+  Platform,
+  useWindowDimensions
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -20,15 +22,77 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { isArticleSaved, saveArticleForOffline, removeOfflineArticle, getSavedArticles } from '../../services/offlineStorage';
 import LoadingSpinner from '../../components/LoadingSpinner';
 
+// WebView for embeds - only on native
+let WebView: any = null;
+try {
+  if (Platform.OS !== 'web') {
+    WebView = require('react-native-webview').default;
+  }
+} catch {}
+
+// Helper to extract embeds from HTML content
+function extractEmbeds(html: string): { cleanText: string; embeds: { type: string; url: string; html: string }[] } {
+  const embeds: { type: string; url: string; html: string }[] = [];
+  if (!html) return { cleanText: '', embeds };
+  
+  // Extract iframes (YouTube, Vimeo, Spotify, etc.)
+  const iframeRegex = /<iframe[^>]*src=["']([^"']+)["'][^>]*(?:\/>|>[^<]*<\/iframe>)/gi;
+  let match;
+  while ((match = iframeRegex.exec(html)) !== null) {
+    const src = match[1];
+    let type = 'embed';
+    if (src.includes('youtube') || src.includes('youtu.be')) type = 'youtube';
+    else if (src.includes('vimeo')) type = 'vimeo';
+    else if (src.includes('spotify')) type = 'spotify';
+    else if (src.includes('soundcloud')) type = 'soundcloud';
+    embeds.push({ type, url: src, html: match[0] });
+  }
+  
+  // Extract video tags
+  const videoRegex = /<video[^>]*>[\s\S]*?<\/video>/gi;
+  while ((match = videoRegex.exec(html)) !== null) {
+    const srcMatch = match[0].match(/src=["']([^"']+)["']/);
+    if (srcMatch) {
+      embeds.push({ type: 'video', url: srcMatch[1], html: match[0] });
+    }
+  }
+  
+  // Extract audio tags
+  const audioRegex = /<audio[^>]*>[\s\S]*?<\/audio>/gi;
+  while ((match = audioRegex.exec(html)) !== null) {
+    const srcMatch = match[0].match(/src=["']([^"']+)["']/);
+    if (srcMatch) {
+      embeds.push({ type: 'audio', url: srcMatch[1], html: match[0] });
+    }
+  }
+  
+  // Clean text - remove all HTML tags
+  const cleanText = html
+    .replace(/<iframe[^>]*(?:\/>|>[\s\S]*?<\/iframe>)/gi, '')
+    .replace(/<video[^>]*>[\s\S]*?<\/video>/gi, '')
+    .replace(/<audio[^>]*>[\s\S]*?<\/audio>/gi, '')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .trim();
+  
+  return { cleanText, embeds };
+}
+
 export default function ArticleDetail() {
   const { id, offline } = useLocalSearchParams<{ id: string; offline?: string }>();
   const router = useRouter();
   const { user, refreshUser } = useAuth();
   const { colors } = useTheme();
+  const { width } = useWindowDimensions();
   const [article, setArticle] = useState<Article | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSaved, setIsSaved] = useState(false);
+  const [embedHeights, setEmbedHeights] = useState<{ [key: number]: number }>({});
 
   useEffect(() => {
     loadArticle();
@@ -115,6 +179,70 @@ export default function ArticleDetail() {
     return html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
   };
 
+  // Render embed component
+  const renderEmbed = (embed: { type: string; url: string; html: string }, index: number) => {
+    const embedWidth = width - 40;
+    const embedHeight = embedHeights[index] || (embed.type === 'youtube' || embed.type === 'vimeo' ? Math.round(embedWidth * 9 / 16) : 200);
+    
+    if (Platform.OS === 'web') {
+      // On web, use dangerouslySetInnerHTML via iframe
+      const iframeSrc = embed.url.startsWith('//') ? `https:${embed.url}` : embed.url;
+      return (
+        <View key={index} style={[styles.embedContainer, { backgroundColor: colors.background }]}>
+          <View style={styles.embedLabel}>
+            <Ionicons name={embed.type === 'youtube' ? 'logo-youtube' : embed.type === 'spotify' ? 'musical-notes' : 'play-circle'} size={16} color="#EF4444" />
+            <Text style={[styles.embedLabelText, { color: colors.textSecondary }]}>
+              {embed.type === 'youtube' ? 'Video YouTube' : embed.type === 'spotify' ? 'Podcast Spotify' : 'Media'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.embedPlayButton}
+            onPress={() => Linking.openURL(iframeSrc)}
+          >
+            <Ionicons name="open-outline" size={20} color="#3B82F6" />
+            <Text style={styles.embedPlayText}>Apri nel browser</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    
+    // On native, use WebView
+    if (WebView) {
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html><head>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+          <style>
+            body { margin: 0; padding: 0; background: transparent; }
+            iframe, video, audio { width: 100% !important; max-width: 100%; border: none; }
+            iframe { height: ${embedHeight}px; }
+          </style>
+        </head><body>${embed.html}</body></html>
+      `;
+      
+      return (
+        <View key={index} style={[styles.embedContainer, { backgroundColor: colors.background }]}>
+          <View style={styles.embedLabel}>
+            <Ionicons name={embed.type === 'youtube' ? 'logo-youtube' : embed.type === 'spotify' ? 'musical-notes' : 'play-circle'} size={16} color="#EF4444" />
+            <Text style={[styles.embedLabelText, { color: colors.textSecondary }]}>
+              {embed.type === 'youtube' ? 'Video YouTube' : embed.type === 'spotify' ? 'Podcast Spotify' : 'Media'}
+            </Text>
+          </View>
+          <WebView
+            source={{ html: htmlContent }}
+            style={{ width: embedWidth, height: embedHeight, backgroundColor: 'transparent' }}
+            allowsInlineMediaPlayback={true}
+            mediaPlaybackRequiresUserAction={false}
+            javaScriptEnabled={true}
+            scrollEnabled={false}
+          />
+        </View>
+      );
+    }
+    
+    return null;
+  };
+
   if (isLoading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -194,6 +322,14 @@ export default function ArticleDetail() {
         )}
 
         <View style={styles.articleContent}>
+          {/* Author info below image */}
+          {article.author && (
+            <View style={[styles.authorBar, { borderBottomColor: colors.border }]}>
+              <Ionicons name="person-circle-outline" size={20} color={colors.primary} />
+              <Text style={[styles.authorName, { color: colors.text }]}>{article.author}</Text>
+            </View>
+          )}
+
           <View style={styles.meta}>
             <View style={styles.categoryBadge}>
               <Text style={styles.categoryText}>{article.feed_name}</Text>
@@ -210,17 +346,28 @@ export default function ArticleDetail() {
             </View>
           )}
 
-          {article.description && (
-            <Text style={[styles.description, { color: colors.textSecondary }]}>
-              {removeHtmlTags(article.description)}
-            </Text>
-          )}
+          {article.description && (() => {
+            const { cleanText } = extractEmbeds(article.description || '');
+            return cleanText ? (
+              <Text style={[styles.description, { color: colors.textSecondary }]}>
+                {cleanText}
+              </Text>
+            ) : null;
+          })()}
 
-          {article.content && (
-            <Text style={[styles.contentText, { color: colors.text }]}>
-              {removeHtmlTags(article.content)}
-            </Text>
-          )}
+          {article.content && (() => {
+            const { cleanText, embeds } = extractEmbeds(article.content || '');
+            return (
+              <>
+                {cleanText ? (
+                  <Text style={[styles.contentText, { color: colors.text }]}>
+                    {cleanText}
+                  </Text>
+                ) : null}
+                {embeds.map((embed, i) => renderEmbed(embed, i))}
+              </>
+            );
+          })()}
 
           <TouchableOpacity style={styles.readMoreButton} onPress={handleOpenLink}>
             <Text style={styles.readMoreText}>Leggi l'articolo completo</Text>
@@ -269,6 +416,18 @@ const styles = StyleSheet.create({
   },
   articleContent: {
     padding: 20
+  },
+  authorBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingBottom: 12,
+    marginBottom: 12,
+    borderBottomWidth: 1
+  },
+  authorName: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginLeft: 8
   },
   meta: {
     flexDirection: 'row',
@@ -364,5 +523,35 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600'
+  },
+  embedContainer: {
+    marginVertical: 12,
+    borderRadius: 12,
+    padding: 12,
+    overflow: 'hidden'
+  },
+  embedLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8
+  },
+  embedLabelText: {
+    fontSize: 13,
+    fontWeight: '500',
+    marginLeft: 6
+  },
+  embedPlayButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EFF6FF',
+    padding: 14,
+    borderRadius: 10
+  },
+  embedPlayText: {
+    color: '#3B82F6',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8
   }
 });

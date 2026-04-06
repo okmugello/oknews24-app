@@ -116,11 +116,18 @@ class Article(BaseModel):
     content: Optional[str] = None
     link: str
     image_url: Optional[str] = None
+    author: Optional[str] = None
     pub_date: Optional[datetime] = None
     created_at: datetime
 
 class SubscriptionCreate(BaseModel):
     plan_type: str  # monthly or yearly
+
+class AdminUserCreate(BaseModel):
+    email: EmailStr
+    name: str
+    password: str
+    subscription_plan: str = "monthly"  # monthly, yearly, trial
 
 class Subscription(BaseModel):
     subscription_id: str
@@ -597,6 +604,9 @@ async def refresh_articles(request: Request):
     """Fetch new articles from all active feeds"""
     user = await require_admin(request)
     
+    # Ensure unique index on link field to prevent duplicates at DB level
+    await db.articles.create_index("link", unique=True, sparse=True)
+    
     feeds = await db.feeds.find({"active": True}, {"_id": 0}).to_list(100)
     new_articles_count = 0
     
@@ -605,7 +615,7 @@ async def refresh_articles(request: Request):
             parsed = feedparser.parse(feed["url"])
             
             # Collect all entry links for this feed first
-            entry_links = [entry.get("link") for entry in parsed.entries[:20] if entry.get("link")]
+            entry_links = [entry.get("link", "").rstrip("/").split("?")[0] for entry in parsed.entries[:20] if entry.get("link")]
             
             # Batch query: Get all existing articles with these links in one query
             existing_docs = await db.articles.find(
@@ -614,11 +624,20 @@ async def refresh_articles(request: Request):
             ).to_list(None)
             existing_links = {doc["link"] for doc in existing_docs}
             
+            # Also check by title+feed to catch slight URL variations
+            entry_titles = [entry.get("title", "") for entry in parsed.entries[:20] if entry.get("title")]
+            existing_titles_docs = await db.articles.find(
+                {"feed_id": feed["feed_id"], "title": {"$in": entry_titles}},
+                {"title": 1}
+            ).to_list(None)
+            existing_titles = {doc["title"] for doc in existing_titles_docs}
+            
             for entry in parsed.entries[:20]:  # Limit to 20 per feed
-                link = entry.get("link", "")
+                link = entry.get("link", "").rstrip("/").split("?")[0]
+                title = entry.get("title", "No title")
                 
-                # Skip if article already exists (O(1) lookup instead of database query)
-                if link in existing_links:
+                # Skip if article already exists (by link OR title+feed)
+                if link in existing_links or title in existing_titles:
                     continue
                 
                 # Generate unique article ID based on link
@@ -633,6 +652,18 @@ async def refresh_articles(request: Request):
                 else:
                     pub_date = datetime.now(timezone.utc)
                 
+                # Get author info
+                author = None
+                if hasattr(entry, 'author') and entry.author:
+                    author = entry.author
+                elif hasattr(entry, 'author_detail') and entry.author_detail:
+                    author = entry.author_detail.get('name', None)
+                elif hasattr(entry, 'authors') and entry.authors:
+                    author = ', '.join([a.get('name', '') for a in entry.authors if a.get('name')])
+                # Try dc:creator as fallback
+                if not author and hasattr(entry, 'get'):
+                    author = entry.get('dc_creator', None)
+                
                 # Get image URL from media content or enclosure
                 image_url = None
                 if hasattr(entry, 'media_content') and entry.media_content:
@@ -646,7 +677,7 @@ async def refresh_articles(request: Request):
                             image_url = enc.get('href')
                             break
                 
-                # Get description/content
+                # Get description/content - preserve HTML for embeds
                 description = entry.get('summary', entry.get('description', ''))
                 content = entry.get('content', [{}])[0].get('value', '') if hasattr(entry, 'content') else description
                 
@@ -655,17 +686,23 @@ async def refresh_articles(request: Request):
                     "feed_id": feed["feed_id"],
                     "feed_name": feed["name"],
                     "category": feed.get("category", "general"),
-                    "title": entry.get("title", "No title"),
+                    "title": title,
                     "description": description[:500] if description else None,
                     "content": content,
                     "link": link,
                     "image_url": image_url,
+                    "author": author,
                     "pub_date": pub_date,
                     "created_at": datetime.now(timezone.utc)
                 }
                 
-                await db.articles.insert_one(article_doc)
-                new_articles_count += 1
+                try:
+                    await db.articles.insert_one(article_doc)
+                    new_articles_count += 1
+                except Exception as dup_err:
+                    # Skip duplicates (unique index violation)
+                    logger.debug(f"Duplicate article skipped: {link}")
+                    continue
                 
         except Exception as e:
             logger.error(f"Error fetching feed {feed['name']}: {e}")
@@ -1175,6 +1212,79 @@ async def get_admin_stats(request: Request):
         "total_articles": total_articles,
         "total_feeds": total_feeds
     }
+
+@api_router.post("/admin/users/create")
+async def admin_create_user(user_data: AdminUserCreate, request: Request):
+    """Admin creates a new subscribed user"""
+    admin = await require_admin(request)
+    
+    # Check if user exists
+    existing = await db.users.find_one({"email": user_data.email}, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email già registrata")
+    
+    user_id = f"user_{uuid.uuid4().hex[:12]}"
+    hashed_password = hash_password(user_data.password)
+    
+    # Calculate subscription end date
+    sub_status = user_data.subscription_plan
+    sub_end_date = None
+    if sub_status == "monthly":
+        sub_end_date = datetime.now(timezone.utc) + timedelta(days=30)
+    elif sub_status == "yearly":
+        sub_end_date = datetime.now(timezone.utc) + timedelta(days=365)
+    
+    user_doc = {
+        "user_id": user_id,
+        "email": user_data.email,
+        "name": user_data.name,
+        "password_hash": hashed_password,
+        "picture": None,
+        "role": "user",
+        "articles_read": 0,
+        "subscription_status": sub_status,
+        "subscription_end_date": sub_end_date,
+        "created_at": datetime.now(timezone.utc)
+    }
+    
+    await db.users.insert_one(user_doc)
+    
+    user_doc.pop("password_hash", None)
+    user_doc.pop("_id", None)
+    return user_doc
+
+@api_router.post("/admin/articles/deduplicate")
+async def deduplicate_articles(request: Request):
+    """Remove duplicate articles from database"""
+    admin = await require_admin(request)
+    
+    # Find duplicates by link
+    pipeline = [
+        {"$group": {
+            "_id": "$link",
+            "count": {"$sum": 1},
+            "ids": {"$push": "$article_id"},
+            "first": {"$first": "$article_id"}
+        }},
+        {"$match": {"count": {"$gt": 1}}}
+    ]
+    
+    duplicates = await db.articles.aggregate(pipeline).to_list(None)
+    removed = 0
+    
+    for dup in duplicates:
+        # Keep the first, remove the rest
+        ids_to_remove = [aid for aid in dup["ids"] if aid != dup["first"]]
+        result = await db.articles.delete_many({"article_id": {"$in": ids_to_remove}})
+        removed += result.deleted_count
+    
+    # Also create unique index to prevent future duplicates
+    try:
+        await db.articles.create_index("link", unique=True, sparse=True)
+    except Exception:
+        pass  # Index might already exist
+    
+    return {"message": f"Removed {removed} duplicate articles"}
 
 # ============== INITIALIZATION ==============
 
