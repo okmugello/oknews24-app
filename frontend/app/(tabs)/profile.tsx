@@ -6,18 +6,21 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
-  Image
+  Image,
+  Switch
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme, ThemeMode } from '../../contexts/ThemeContext';
 
 const FREE_ARTICLES_LIMIT = 5;
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, logout } = useAuth();
+  const { mode, isDark, colors, setMode, toggleTheme } = useTheme();
 
   const handleLogout = () => {
     Alert.alert(
@@ -35,6 +38,28 @@ export default function ProfileScreen() {
         }
       ]
     );
+  };
+
+  const handleThemeChange = () => {
+    // Cycle through: system -> light -> dark -> system
+    const nextMode: ThemeMode = mode === 'system' ? 'light' : mode === 'light' ? 'dark' : 'system';
+    setMode(nextMode);
+  };
+
+  const getThemeText = () => {
+    switch (mode) {
+      case 'system': return 'Automatico';
+      case 'light': return 'Chiaro';
+      case 'dark': return 'Scuro';
+    }
+  };
+
+  const getThemeIcon = () => {
+    switch (mode) {
+      case 'system': return 'phone-portrait-outline';
+      case 'light': return 'sunny-outline';
+      case 'dark': return 'moon-outline';
+    }
   };
 
   const getSubscriptionText = () => {
@@ -141,14 +166,30 @@ export default function ProfileScreen() {
 
         {/* User Preferences */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Preferenze</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Preferenze</Text>
           <TouchableOpacity
-            style={styles.menuItem}
+            style={[styles.menuItem, { backgroundColor: colors.card }]}
             onPress={() => router.push('/(tabs)/feed-preferences' as any)}
           >
-            <Ionicons name="newspaper-outline" size={24} color="#4B5563" />
-            <Text style={styles.menuItemText}>Gestione Feed</Text>
-            <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+            <Ionicons name="newspaper-outline" size={24} color={colors.textSecondary} />
+            <Text style={[styles.menuItemText, { color: colors.text }]}>Gestione Feed</Text>
+            <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+          </TouchableOpacity>
+          
+          {/* Theme Toggle */}
+          <TouchableOpacity
+            style={[styles.menuItem, { backgroundColor: colors.card }]}
+            onPress={handleThemeChange}
+          >
+            <Ionicons name={getThemeIcon() as any} size={24} color={colors.textSecondary} />
+            <Text style={[styles.menuItemText, { color: colors.text }]}>Tema: {getThemeText()}</Text>
+            <View style={styles.themeToggle}>
+              <Ionicons 
+                name={isDark ? "moon" : "sunny"} 
+                size={20} 
+                color={isDark ? "#F59E0B" : "#3B82F6"} 
+              />
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -368,6 +409,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1F2937',
     marginLeft: 12
+  },
+  themeToggle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center'
   },
   logoutButton: {
     flexDirection: 'row',

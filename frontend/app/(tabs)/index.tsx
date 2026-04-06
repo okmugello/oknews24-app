@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import ArticleCard from '../../components/ArticleCard';
 import SubscriptionBanner from '../../components/SubscriptionBanner';
 import LoadingSpinner from '../../components/LoadingSpinner';
@@ -21,6 +22,7 @@ import { getArticles, getFeeds, Article, Feed, refreshArticles, getFeedPreferenc
 export default function HomeScreen() {
   const router = useRouter();
   const { user, refreshUser } = useAuth();
+  const { colors, isDark } = useTheme();
   const [articles, setArticles] = useState<Article[]>([]);
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [enabledFeeds, setEnabledFeeds] = useState<string[]>([]);
@@ -137,7 +139,7 @@ export default function HomeScreen() {
 
   const renderHeader = () => (
     <View>
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
         <View style={styles.headerContent}>
           <Image 
             source={require('../../assets/images/oknews24-logo.png')} 
@@ -150,7 +152,7 @@ export default function HomeScreen() {
             style={styles.refreshButton}
             onPress={handleRefresh}
           >
-            <Ionicons name="refresh" size={24} color="#3B82F6" />
+            <Ionicons name="refresh" size={24} color={colors.primary} />
           </TouchableOpacity>
         )}
       </View>
@@ -161,7 +163,7 @@ export default function HomeScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         {renderHeader()}
         <LoadingSpinner fullScreen message="Caricamento notizie..." />
       </SafeAreaView>
@@ -169,7 +171,7 @@ export default function HomeScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <FlatList
         data={articles}
         keyExtractor={(item) => item.article_id}
