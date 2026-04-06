@@ -14,7 +14,9 @@
       "infoPlist": {
         "NSCameraUsageDescription": "Scatta foto per il tuo profilo",
         "NSPhotoLibraryUsageDescription": "Seleziona foto per il tuo profilo",
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
       },
       "config": {
         "googleSignIn": {
@@ -60,7 +62,8 @@
           "icon": "./assets/images/icon.png",
           "color": "#3B82F6"
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
