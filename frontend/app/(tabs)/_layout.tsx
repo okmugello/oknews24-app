@@ -2,19 +2,21 @@ import React from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 
 export default function TabLayout() {
   const { user } = useAuth();
+  const { colors, isDark } = useTheme();
   const isAdmin = user?.role === 'admin';
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#3B82F6',
-        tabBarInactiveTintColor: '#6B7280',
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textTertiary,
         tabBarStyle: {
-          backgroundColor: '#FFFFFF',
-          borderTopColor: '#E5E7EB',
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
           paddingTop: 8,
           paddingBottom: 8,
           height: 60
@@ -36,6 +38,15 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="saved-articles"
+        options={{
+          title: 'Salvati',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="bookmark" size={size} color={color} />
+          )
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: 'Profilo',
@@ -44,7 +55,13 @@ export default function TabLayout() {
           )
         }}
       />
-      {isAdmin && (
+      <Tabs.Screen
+        name="feed-preferences"
+        options={{
+          href: null
+        }}
+      />
+      {isAdmin ? (
         <Tabs.Screen
           name="admin"
           options={{
@@ -52,6 +69,13 @@ export default function TabLayout() {
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="settings" size={size} color={color} />
             )
+          }}
+        />
+      ) : (
+        <Tabs.Screen
+          name="admin"
+          options={{
+            href: null
           }}
         />
       )}

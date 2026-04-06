@@ -108,8 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Then try to verify with server (optional, for data freshness)
       try {
         const response = await axios.get(`${API_URL}/api/auth/me`, {
-          headers: { Authorization: `Bearer ${storedToken}` },
-          withCredentials: true
+          headers: { Authorization: `Bearer ${storedToken}` }
         });
         // Update with fresh data from server
         setUser(response.data);
@@ -140,7 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const response = await axios.post(`${API_URL}/api/auth/login`, {
       email,
       password
-    }, { withCredentials: true });
+    });
 
     console.log('Login successful:', response.data);
 
@@ -164,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email,
       name,
       password
-    }, { withCredentials: true });
+    });
 
     console.log('Register response:', response.data);
 
@@ -189,7 +188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await axios.post(`${API_URL}/api/auth/session`, {
         session_id: sessionId
-      }, { withCredentials: true });
+      });
 
       const userData = response.data;
       const token = `session_${Date.now()}_${Math.random().toString(36).substring(7)}`;
@@ -209,8 +208,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const storedToken = await storage.getItem('session_token');
       await axios.post(`${API_URL}/api/auth/logout`, {}, {
-        headers: storedToken ? { Authorization: `Bearer ${storedToken}` } : {},
-        withCredentials: true
+        headers: storedToken ? { Authorization: `Bearer ${storedToken}` } : {}
       });
     } catch (error) {
       console.log('Logout error:', error);
@@ -235,8 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Try to get fresh data from server
         try {
           const response = await axios.get(`${API_URL}/api/auth/me`, {
-            headers: { Authorization: `Bearer ${storedToken}` },
-            withCredentials: true
+            headers: { Authorization: `Bearer ${storedToken}` }
           });
           setUser(response.data);
           await storage.setItem('user_data', JSON.stringify(response.data));

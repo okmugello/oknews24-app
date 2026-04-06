@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme, ThemeMode } from '../../contexts/ThemeContext';
+import { getSavedArticles } from '../../services/offlineStorage';
 
 const FREE_ARTICLES_LIMIT = 5;
 
@@ -21,6 +22,18 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { user, logout } = useAuth();
   const { mode, isDark, colors, setMode, toggleTheme } = useTheme();
+  const [savedCount, setSavedCount] = useState(0);
+
+  useEffect(() => {
+    loadSavedCount();
+  }, []);
+
+  const loadSavedCount = async () => {
+    try {
+      const saved = await getSavedArticles();
+      setSavedCount(saved.length);
+    } catch {}
+  };
 
   const handleLogout = () => {
     Alert.alert(
@@ -161,12 +174,31 @@ export default function ProfileScreen() {
               <Text style={styles.statValue}>{user?.articles_read || 0}</Text>
               <Text style={styles.statLabel}>Articoli letti</Text>
             </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Ionicons name="bookmark-outline" size={24} color="#10B981" />
+              <Text style={styles.statValue}>{savedCount}</Text>
+              <Text style={styles.statLabel}>Salvati offline</Text>
+            </View>
           </View>
         </View>
 
         {/* User Preferences */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Preferenze</Text>
+          <TouchableOpacity
+            style={[styles.menuItem, { backgroundColor: colors.card }]}
+            onPress={() => router.push('/(tabs)/saved-articles' as any)}
+          >
+            <Ionicons name="bookmark-outline" size={24} color={colors.textSecondary} />
+            <Text style={[styles.menuItemText, { color: colors.text }]}>Articoli Salvati</Text>
+            {savedCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{savedCount}</Text>
+              </View>
+            )}
+            <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+          </TouchableOpacity>
           <TouchableOpacity
             style={[styles.menuItem, { backgroundColor: colors.card }]}
             onPress={() => router.push('/(tabs)/feed-preferences' as any)}
@@ -380,6 +412,11 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center'
   },
+  statDivider: {
+    width: 1,
+    backgroundColor: '#E5E7EB',
+    marginVertical: 4
+  },
   statValue: {
     fontSize: 24,
     fontWeight: '700',
@@ -433,5 +470,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 8
+  },
+  badge: {
+    backgroundColor: '#3B82F6',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginRight: 8
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600'
   }
 });

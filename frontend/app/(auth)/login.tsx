@@ -34,12 +34,8 @@ export default function LoginScreen() {
     try {
       await login(email, password);
       console.log('Login completed successfully');
-      // Don't navigate - the AuthContext will update and the Redirect in index.tsx will handle it
-      // For web, we need to reload the page to pick up the new state from localStorage
-      if (Platform.OS === 'web') {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        window.location.reload();
-      }
+      // Navigate to the tabs - the auth state is already updated
+      router.replace('/(tabs)' as Href);
     } catch (error: any) {
       console.log('Login error:', error);
       Alert.alert(
