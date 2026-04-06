@@ -59,6 +59,12 @@ export interface Plan {
   currency: string;
   interval: string;
   description: string;
+  stripe_price_id?: string;
+}
+
+export interface PlansResponse {
+  plans: Plan[];
+  stripe_publishable_key: string;
 }
 
 // API Functions
@@ -87,10 +93,15 @@ export const updateFeed = (feedId: string, data: { name: string; url: string; ca
 
 export const deleteFeed = (feedId: string) => api.delete(`/feeds/${feedId}`);
 
-export const getPlans = () => api.get<{ plans: Plan[] }>('/subscriptions/plans');
+export const getPlans = () => api.get<PlansResponse>('/subscriptions/plans');
 
-export const subscribe = (planType: string) => 
-  api.post('/subscriptions/subscribe', { plan_type: planType });
+export const createCheckoutSession = (planType: string) => 
+  api.post<{ checkout_url: string; session_id: string }>('/subscriptions/create-checkout-session', { plan_type: planType });
+
+export const verifyCheckoutSession = (sessionId: string) =>
+  api.get<{ success: boolean; plan_type?: string; status?: string; message?: string }>(`/subscriptions/verify-session/${sessionId}`);
+
+export const cancelSubscription = () => api.post('/subscriptions/cancel');
 
 export const getMySubscription = () => api.get('/subscriptions/my');
 

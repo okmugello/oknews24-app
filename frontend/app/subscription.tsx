@@ -5,26 +5,37 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert
+  Alert,
+  Linking,
+  Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
-import { getPlans, subscribe, Plan } from '../services/api';
+import { getPlans, createCheckoutSession, verifyCheckoutSession, cancelSubscription, Plan } from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 export default function SubscriptionScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { user, refreshUser } = useAuth();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSubscribing, setIsSubscribing] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const [verificationMessage, setVerificationMessage] = useState<string | null>(null);
 
   useEffect(() => {
     loadPlans();
-  }, []);
+    
+    // Check for success/cancel from Stripe redirect
+    if (params.success === 'true' && params.session_id) {
+      verifyPayment(params.session_id as string);
+    } else if (params.canceled === 'true') {
+      setVerificationMessage('Pagamento annullato. Puoi riprovare quando vuoi.');
+    }
+  }, [params]);
 
   const loadPlans = async () => {
     try {
@@ -37,28 +48,78 @@ export default function SubscriptionScreen() {
     }
   };
 
+  const verifyPayment = async (sessionId: string) => {
+    setIsProcessing(true);
+    try {
+      const response = await verifyCheckoutSession(sessionId);
+      if (response.data.success) {
+        await refreshUser();
+        setVerificationMessage('Pagamento completato con successo! Il tuo abbonamento è ora attivo.');
+      } else {
+        setVerificationMessage('Verifica del pagamento in corso. Ricarica tra qualche secondo.');
+      }
+    } catch (error) {
+      console.error('Error verifying payment:', error);
+      setVerificationMessage('Errore nella verifica del pagamento. Contatta il supporto se il problema persiste.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleSubscribe = async (planId: string) => {
     setSelectedPlan(planId);
-    setIsSubscribing(true);
+    setIsProcessing(true);
 
     try {
-      await subscribe(planId);
-      await refreshUser();
-
-      Alert.alert(
-        'Abbonamento attivato!',
-        'Grazie per il tuo abbonamento. Ora hai accesso illimitato a tutte le notizie.',
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
+      const response = await createCheckoutSession(planId);
+      const checkoutUrl = response.data.checkout_url;
+      
+      if (checkoutUrl) {
+        // Open Stripe Checkout in browser
+        if (Platform.OS === 'web') {
+          window.location.href = checkoutUrl;
+        } else {
+          const canOpen = await Linking.canOpenURL(checkoutUrl);
+          if (canOpen) {
+            await Linking.openURL(checkoutUrl);
+          } else {
+            Alert.alert('Errore', 'Impossibile aprire la pagina di pagamento');
+          }
+        }
+      }
     } catch (error: any) {
+      console.error('Error creating checkout session:', error);
       Alert.alert(
         'Errore',
-        error.response?.data?.detail || 'Si è verificato un errore'
+        error.response?.data?.detail || 'Impossibile avviare il pagamento. Riprova.'
       );
     } finally {
-      setIsSubscribing(false);
+      setIsProcessing(false);
       setSelectedPlan(null);
     }
+  };
+
+  const handleCancelSubscription = async () => {
+    Alert.alert(
+      'Annulla Abbonamento',
+      'Sei sicuro di voler annullare il tuo abbonamento? Manterrai l\'accesso fino alla fine del periodo già pagato.',
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Sì, annulla',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await cancelSubscription();
+              await refreshUser();
+              Alert.alert('Abbonamento annullato', 'Il tuo abbonamento non verrà rinnovato alla scadenza.');
+            } catch (error) {
+              Alert.alert('Errore', 'Impossibile annullare l\'abbonamento');
+            }
+          }
+        }
+      ]
+    );
   };
 
   if (isLoading) {
@@ -68,6 +129,8 @@ export default function SubscriptionScreen() {
       </SafeAreaView>
     );
   }
+
+  const isSubscribed = user?.subscription_status === 'monthly' || user?.subscription_status === 'yearly';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -80,84 +143,127 @@ export default function SubscriptionScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Verification Message */}
+        {verificationMessage && (
+          <View style={[
+            styles.messageCard,
+            params.success === 'true' ? styles.successCard : styles.warningCard
+          ]}>
+            <Ionicons 
+              name={params.success === 'true' ? 'checkmark-circle' : 'information-circle'} 
+              size={24} 
+              color={params.success === 'true' ? '#10B981' : '#F59E0B'} 
+            />
+            <Text style={styles.messageText}>{verificationMessage}</Text>
+          </View>
+        )}
+
         {/* Hero Section */}
         <View style={styles.hero}>
           <View style={styles.logoCircle}>
             <Text style={styles.logoText}>OK</Text>
           </View>
-          <Text style={styles.heroTitle}>Sblocca OKNews24</Text>
+          <Text style={styles.heroTitle}>
+            {isSubscribed ? 'Il tuo abbonamento' : 'Sblocca OKNews24'}
+          </Text>
           <Text style={styles.heroSubtitle}>
-            Accesso illimitato a tutte le notizie locali della Toscana
+            {isSubscribed 
+              ? 'Grazie per il tuo supporto!' 
+              : 'Accesso illimitato a tutte le notizie locali della Toscana'}
           </Text>
         </View>
 
         {/* Current Status */}
         {user && (
-          <View style={styles.statusCard}>
+          <View style={[
+            styles.statusCard,
+            isSubscribed ? styles.statusCardActive : styles.statusCardTrial
+          ]}>
             <Ionicons
-              name={user.subscription_status === 'trial' ? 'time' : 'checkmark-circle'}
+              name={isSubscribed ? 'checkmark-circle' : 'time'}
               size={24}
-              color={user.subscription_status === 'trial' ? '#F59E0B' : '#10B981'}
+              color={isSubscribed ? '#10B981' : '#F59E0B'}
             />
-            <Text style={styles.statusText}>
+            <Text style={[
+              styles.statusText,
+              isSubscribed ? styles.statusTextActive : styles.statusTextTrial
+            ]}>
               {user.subscription_status === 'trial'
                 ? `Prova gratuita: ${5 - user.articles_read} articoli rimanenti`
                 : user.subscription_status === 'expired'
                 ? 'Abbonamento scaduto'
-                : 'Abbonamento attivo'}
+                : `Abbonamento ${user.subscription_status === 'monthly' ? 'mensile' : 'annuale'} attivo`}
             </Text>
           </View>
         )}
 
-        {/* Plans */}
-        <View style={styles.plansContainer}>
-          {plans.map((plan) => (
-            <TouchableOpacity
-              key={plan.plan_id}
-              style={[
-                styles.planCard,
-                plan.plan_id === 'yearly' && styles.planCardHighlighted
-              ]}
-              onPress={() => handleSubscribe(plan.plan_id)}
-              disabled={isSubscribing}
-            >
-              {plan.plan_id === 'yearly' && (
-                <View style={styles.bestValueBadge}>
-                  <Text style={styles.bestValueText}>RISPARMIA €12</Text>
-                </View>
-              )}
-              <Text style={styles.planName}>{plan.name}</Text>
-              <View style={styles.priceContainer}>
-                <Text style={styles.currency}>€</Text>
-                <Text style={styles.price}>
-                  {plan.plan_id === 'yearly' ? '3' : plan.price.toFixed(0)}
-                </Text>
-                <Text style={styles.period}>
-                  /{plan.plan_id === 'yearly' ? 'mese' : 'mese'}
-                </Text>
-              </View>
-              {plan.plan_id === 'yearly' && (
-                <Text style={styles.yearlyPrice}>Fatturazione annuale: €36/anno</Text>
-              )}
-              <Text style={styles.planDescription}>{plan.description}</Text>
-              <View style={[
-                styles.subscribeButton,
-                plan.plan_id === 'yearly' && styles.subscribeButtonHighlighted
-              ]}>
-                {isSubscribing && selectedPlan === plan.plan_id ? (
-                  <LoadingSpinner />
-                ) : (
-                  <Text style={[
-                    styles.subscribeButtonText,
-                    plan.plan_id === 'yearly' && styles.subscribeButtonTextHighlighted
-                  ]}>
-                    Scegli questo piano
-                  </Text>
+        {/* Plans - Show only if not subscribed */}
+        {!isSubscribed && (
+          <View style={styles.plansContainer}>
+            {plans.map((plan) => (
+              <TouchableOpacity
+                key={plan.plan_id}
+                style={[
+                  styles.planCard,
+                  plan.plan_id === 'yearly' && styles.planCardHighlighted
+                ]}
+                onPress={() => handleSubscribe(plan.plan_id)}
+                disabled={isProcessing}
+              >
+                {plan.plan_id === 'yearly' && (
+                  <View style={styles.bestValueBadge}>
+                    <Text style={styles.bestValueText}>RISPARMIA €12</Text>
+                  </View>
                 )}
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
+                <Text style={styles.planName}>{plan.name}</Text>
+                <View style={styles.priceContainer}>
+                  <Text style={styles.currency}>€</Text>
+                  <Text style={styles.price}>
+                    {plan.plan_id === 'yearly' ? '3' : plan.price.toFixed(0)}
+                  </Text>
+                  <Text style={styles.period}>/mese</Text>
+                </View>
+                {plan.plan_id === 'yearly' && (
+                  <Text style={styles.yearlyPrice}>Fatturazione annuale: €36/anno</Text>
+                )}
+                <Text style={styles.planDescription}>{plan.description}</Text>
+                <View style={[
+                  styles.subscribeButton,
+                  plan.plan_id === 'yearly' && styles.subscribeButtonHighlighted
+                ]}>
+                  {isProcessing && selectedPlan === plan.plan_id ? (
+                    <LoadingSpinner />
+                  ) : (
+                    <>
+                      <Ionicons 
+                        name="card" 
+                        size={20} 
+                        color={plan.plan_id === 'yearly' ? '#FFFFFF' : '#4B5563'} 
+                        style={{ marginRight: 8 }}
+                      />
+                      <Text style={[
+                        styles.subscribeButtonText,
+                        plan.plan_id === 'yearly' && styles.subscribeButtonTextHighlighted
+                      ]}>
+                        Paga con Stripe
+                      </Text>
+                    </>
+                  )}
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* Cancel button for subscribed users */}
+        {isSubscribed && (
+          <TouchableOpacity 
+            style={styles.cancelButton}
+            onPress={handleCancelSubscription}
+          >
+            <Text style={styles.cancelButtonText}>Annulla abbonamento</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Features */}
         <View style={styles.features}>
@@ -178,12 +284,17 @@ export default function SubscriptionScreen() {
             <Ionicons name="checkmark-circle" size={20} color="#10B981" />
             <Text style={styles.featureText}>Nessuna pubblicità</Text>
           </View>
+          <View style={styles.featureItem}>
+            <Ionicons name="shield-checkmark" size={20} color="#3B82F6" />
+            <Text style={styles.featureText}>Pagamenti sicuri con Stripe</Text>
+          </View>
         </View>
 
-        {/* Disclaimer */}
-        <Text style={styles.disclaimer}>
-          Nota: Sistema di pagamento in fase di attivazione. L'abbonamento verrà attivato automaticamente per test.
-        </Text>
+        {/* Stripe Badge */}
+        <View style={styles.stripeBadge}>
+          <Ionicons name="lock-closed" size={16} color="#6B7280" />
+          <Text style={styles.stripeBadgeText}>Pagamenti sicuri gestiti da Stripe</Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -218,6 +329,30 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 20
   },
+  messageCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 24
+  },
+  successCard: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0'
+  },
+  warningCard: {
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A'
+  },
+  messageText: {
+    flex: 1,
+    marginLeft: 12,
+    fontSize: 14,
+    color: '#1F2937',
+    lineHeight: 20
+  },
   hero: {
     alignItems: 'center',
     marginBottom: 24
@@ -250,16 +385,30 @@ const styles = StyleSheet.create({
   statusCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFBEB',
-    padding: 12,
+    padding: 16,
     borderRadius: 12,
     marginBottom: 24
   },
+  statusCardTrial: {
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A'
+  },
+  statusCardActive: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0'
+  },
   statusText: {
-    marginLeft: 8,
-    fontSize: 14,
-    fontWeight: '500',
+    marginLeft: 12,
+    fontSize: 15,
+    fontWeight: '600'
+  },
+  statusTextTrial: {
     color: '#92400E'
+  },
+  statusTextActive: {
+    color: '#065F46'
   },
   plansContainer: {
     marginBottom: 24
@@ -327,10 +476,12 @@ const styles = StyleSheet.create({
     marginBottom: 16
   },
   subscribeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#F3F4F6',
     paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center'
+    borderRadius: 12
   },
   subscribeButtonHighlighted: {
     backgroundColor: '#3B82F6'
@@ -342,6 +493,18 @@ const styles = StyleSheet.create({
   },
   subscribeButtonTextHighlighted: {
     color: '#FFFFFF'
+  },
+  cancelButton: {
+    backgroundColor: '#FEE2E2',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 24
+  },
+  cancelButtonText: {
+    color: '#DC2626',
+    fontSize: 16,
+    fontWeight: '600'
   },
   features: {
     backgroundColor: '#FFFFFF',
@@ -365,10 +528,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#4B5563'
   },
-  disclaimer: {
+  stripeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12
+  },
+  stripeBadgeText: {
+    marginLeft: 8,
     fontSize: 12,
-    color: '#9CA3AF',
-    textAlign: 'center',
-    lineHeight: 18
+    color: '#6B7280'
   }
 });
