@@ -37,8 +37,7 @@
         "VIBRATE",
         "WAKE_LOCK",
         "SCHEDULE_EXACT_ALARM"
-      ],
-      "googleServicesFile": "./google-services.json"
+      ]
     },
     "web": {
       "bundler": "metro",
