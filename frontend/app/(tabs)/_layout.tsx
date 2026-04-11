@@ -1,12 +1,14 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 
 export default function TabLayout() {
   const { user } = useAuth();
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const isAdmin = user?.role === 'admin';
 
   return (
@@ -18,8 +20,8 @@ export default function TabLayout() {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
           paddingTop: 8,
-          paddingBottom: 8,
-          height: 60
+          paddingBottom: 8 + insets.bottom,
+          height: 60 + insets.bottom
         },
         tabBarLabelStyle: {
           fontSize: 12,

@@ -17,6 +17,8 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import { useAuth } from '../../contexts/AuthContext';
 import LoadingSpinner from '../../components/LoadingSpinner';
+// Aggiungi questo import in alto se manca
+import * as AuthSession from 'expo-auth-session';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -35,9 +37,20 @@ export default function LoginScreen() {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   const [request, response, promptAsync] = Google.useAuthRequest({
-    webClientId: GOOGLE_WEB_CLIENT_ID || undefined,
-    iosClientId: GOOGLE_IOS_CLIENT_ID || undefined,
-    androidClientId: GOOGLE_ANDROID_CLIENT_ID || undefined,
+    // ID "Applicazione Web" (IL PIÙ IMPORTANTE: deve corrispondere a quello su Google Console)
+    webClientId: "977075876537-4c7bhkcl1ldpalc0p1l23tprcd5oh08s.apps.googleusercontent.com",
+
+    // ID "Android"
+    androidClientId: "977075876537-s9it0ibg53qrocleme5hsipnv80mi95s.apps.googleusercontent.com",
+
+    // ID "iOS" (usiamo quello Web se non ne hai uno specifico)
+    iosClientId: "977075876537-4c7bhkcl1ldpalc0p1l23tprcd5oh08s.apps.googleusercontent.com",
+
+    // FORZIAMO il redirect verso il server di Expo invece che verso il tuo IP locale
+    redirectUri: AuthSession.makeRedirectUri({
+      scheme: 'oknews24',
+      projectNameForProxy: 'oknews24', // Solo lo slug dell'app
+    }),
   });
 
   // Handle Google response
@@ -97,17 +110,18 @@ export default function LoginScreen() {
     }
   };
 
-  const handleGoogleLogin = () => {
-    if (!GOOGLE_WEB_CLIENT_ID && !GOOGLE_IOS_CLIENT_ID && !GOOGLE_ANDROID_CLIENT_ID) {
-      Alert.alert(
-        'Google OAuth',
-        'Per abilitare il login con Google, configura i Google Client IDs nel file .env:\n\nEXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID\nEXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID\nEXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID\n\nOttienili dalla Google Cloud Console.'
-      );
-      return;
-    }
-    setIsGoogleLoading(true);
-    promptAsync();
-  };
+ const handleGoogleLogin = () => {
+   /* Commenta o cancella questo blocco per saltare il controllo delle variabili .env
+   if (!GOOGLE_WEB_CLIENT_ID && !GOOGLE_IOS_CLIENT_ID && !GOOGLE_ANDROID_CLIENT_ID) {
+     Alert.alert('Google OAuth', '...');
+     return;
+   }
+   */
+
+   // Ora l'app andrà dritta al login usando gli ID che abbiamo scritto sopra
+   setIsGoogleLoading(true);
+   promptAsync();
+ };
 
   return (
     <SafeAreaView style={styles.container}>

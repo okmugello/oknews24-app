@@ -3,8 +3,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { Platform } from 'react-native';
 
-const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+// Scrivi l'URL di Render direttamente per evitare che l'emulatore cerchi localhost
+const API_URL = "https://oknews24-backend.onrender.com"; // <-- METTI IL TUO URL REALE DI RENDER QUI
 
+const api = axios.create({
+  baseURL: "https://oknews24-backend.onrender.com", // Sostituisci con il tuo vero URL
+  timeout: 30000, // Aspetta fino a 30 secondi
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
+  }
+});
 interface User {
   user_id: string;
   email: string;
@@ -133,7 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     console.log('Attempting login for:', email);
-    console.log('API URL:', API_URL);
+    console.log("DEBUG: Sto provando a connettermi a:", API_URL);
     
     const response = await axios.post(`${API_URL}/api/auth/login`, {
       email,
