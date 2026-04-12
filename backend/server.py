@@ -162,10 +162,11 @@ class Subscription(BaseModel):
 
 async def send_reset_email(email: str, token: str):
     """Send a password reset email using SMTP (Gmail)"""
+    # Forziamo 465 se non specificato, poiché SSL è più probabile che passi su Render
     smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
-    smtp_port = int(os.environ.get("SMTP_PORT", 587))
-    smtp_user = os.environ.get("SMTP_USER") # Inserisci la tua email Gmail su Render
-    smtp_pass = os.environ.get("SMTP_PASSWORD") # Inserisci la Password App (senza spazi) su Render
+    smtp_port = int(os.environ.get("SMTP_PORT", 465))
+    smtp_user = os.environ.get("SMTP_USER")
+    smtp_pass = os.environ.get("SMTP_PASSWORD")
 
     if not smtp_user or not smtp_pass:
         logger.error("SMTP credentials not configured. Cannot send email.")
@@ -180,26 +181,29 @@ async def send_reset_email(email: str, token: str):
     Ciao,
 
     Hai richiesto di reimpostare la password per il tuo account OKNews24.
-
     Usa il seguente codice nell'app per procedere:
 
     CODICE DI RESET: {token}
 
     Il team di OKNews24
     """
-
     msg.attach(MIMEText(body, 'plain'))
 
     try:
-        server = smtplib.SMTP(smtp_host, smtp_port, timeout=15)
-        server.starttls()
+        # Se usiamo la porta 465, usiamo SMTP_SSL (connessione criptata dall'inizio)
+        if smtp_port == 465:
+            server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=20)
+        else:
+            server = smtplib.SMTP(smtp_host, smtp_port, timeout=20)
+            server.starttls()
+
         server.login(smtp_user, smtp_pass)
         server.send_message(msg)
         server.quit()
-        logger.info(f"Reset email sent successfully to {email} via Gmail")
+        logger.info(f"Reset email sent successfully via Gmail on port {smtp_port}")
         return True
     except Exception as e:
-        logger.error(f"Failed to send email via Gmail: {e}")
+        logger.error(f"Failed to send email via Gmail (Port {smtp_port}): {e}")
         return False
 
 # ============== AUTH HELPERS ==============
