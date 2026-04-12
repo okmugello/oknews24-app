@@ -96,6 +96,12 @@ export const saveArticleApi = (articleId: string) =>
 export const unsaveArticleApi = (articleId: string) =>
   api.delete(`/articles/save/${articleId}`);
 
+export const forgotPasswordApi = (email: string) =>
+  api.post('/auth/forgot-password', { email });
+
+export const resetPasswordApi = (token: string, newPassword: string) =>
+  api.post('/auth/reset-password', { token, new_password: newPassword });
+
 export const refreshArticles = () => api.post('/articles/refresh');
 
 export const getFeeds = () => api.get<Feed[]>('/feeds');
