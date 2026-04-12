@@ -178,7 +178,7 @@ async def send_reset_email(email: str, token: str):
                     "Content-Type": "application/json"
                 },
                 json={
-                    "from": "OKNews24 <no-reply@send.oknews24.it>",
+                    "from": "OKNews24 <no-reply@oknews24.it>",
                     "to": email,
                     "subject": "Reimpostazione Password - OKNews24",
                     "html": f"""
