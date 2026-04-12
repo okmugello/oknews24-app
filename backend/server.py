@@ -15,6 +15,9 @@ import httpx
 import feedparser
 from jose import jwt, JWTError
 import stripe
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -154,6 +157,55 @@ class Subscription(BaseModel):
     end_date: datetime
     payment_id: Optional[str] = None
     amount: float
+
+# ============== EMAIL HELPER ==============
+
+async def send_reset_email(email: str, token: str):
+    """Send a password reset email using SMTP"""
+    smtp_host = os.environ.get("SMTP_HOST", "smtp200.ext.armada.it")
+    smtp_port = int(os.environ.get("SMTP_PORT", 587))
+    smtp_user = os.environ.get("SMTP_USER", "SMTP-SUPER-7733-1")
+    smtp_pass = os.environ.get("SMTP_PASSWORD", "ZCaE5cDJs35E")
+
+    if not smtp_user or not smtp_pass:
+        logger.error("SMTP credentials not configured. Cannot send email.")
+        return False
+
+    msg = MIMEMultipart()
+    msg['From'] = f"OKNews24 <{smtp_user}>"
+    msg['To'] = email
+    msg['Subject'] = "Reimpostazione Password - OKNews24"
+
+    body = f"""
+    Ciao,
+
+    Hai richiesto di reimpostare la password per il tuo account OKNews24.
+
+    Usa il seguente codice nell'app per procedere:
+
+    CODICE DI RESET: {token}
+
+    Se non hai richiesto tu il reset, ignora questa email.
+    Il codice scadrà tra 1 ora.
+
+    Il team di OKNews24
+    """
+
+    msg.attach(MIMEText(body, 'plain'))
+
+    try:
+        # Usiamo SMTP normale con STARTTLS (consigliato per porta 587 o 25)
+        server = smtplib.SMTP(smtp_host, smtp_port, timeout=15)
+        server.set_debuglevel(1) # Logga i dettagli della connessione
+        server.starttls()
+        server.login(smtp_user, smtp_pass)
+        server.send_message(msg)
+        server.quit()
+        logger.info(f"Reset email sent to {email} via {smtp_host}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send email via {smtp_host}: {e}")
+        return False
 
 # ============== AUTH HELPERS ==============
 
@@ -452,13 +504,13 @@ async def forgot_password(data: ForgotPasswordRequest):
         upsert=True
     )
 
-    # TODO: Inviare l'email effettiva qui
-    # Per ora logghiamo il token (lo vedrai nei log di Render)
-    logger.info(f"Password reset requested for {data.email}. Token: {reset_token}")
+    # Invia l'email effettiva
+    email_sent = await send_reset_email(data.email.lower(), reset_token)
 
-    # In una versione reale, qui chiameremmo una funzione send_email()
+    if not email_sent:
+        logger.warning(f"Could not send email to {data.email}, but token was generated.")
 
-    return {"message": "Istruzioni inviate correttamente."}
+    return {"message": "Se l'email è registrata, riceverai le istruzioni."}
 
 @api_router.post("/auth/reset-password")
 async def reset_password(data: ResetPasswordRequest):
