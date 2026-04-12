@@ -161,11 +161,11 @@ class Subscription(BaseModel):
 # ============== EMAIL HELPER ==============
 
 async def send_reset_email(email: str, token: str):
-    """Send a password reset email using SMTP"""
-    smtp_host = os.environ.get("SMTP_HOST", "smtp200.ext.armada.it")
+    """Send a password reset email using SMTP (Gmail)"""
+    smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
     smtp_port = int(os.environ.get("SMTP_PORT", 587))
-    smtp_user = os.environ.get("SMTP_USER", "SMTP-SUPER-7733-1")
-    smtp_pass = os.environ.get("SMTP_PASSWORD", "ZCaE5cDJs35E")
+    smtp_user = os.environ.get("SMTP_USER") # Inserisci la tua email Gmail su Render
+    smtp_pass = os.environ.get("SMTP_PASSWORD") # Inserisci la Password App (senza spazi) su Render
 
     if not smtp_user or not smtp_pass:
         logger.error("SMTP credentials not configured. Cannot send email.")
@@ -185,26 +185,21 @@ async def send_reset_email(email: str, token: str):
 
     CODICE DI RESET: {token}
 
-    Se non hai richiesto tu il reset, ignora questa email.
-    Il codice scadrà tra 1 ora.
-
     Il team di OKNews24
     """
 
     msg.attach(MIMEText(body, 'plain'))
 
     try:
-        # Usiamo SMTP normale con STARTTLS (consigliato per porta 587 o 25)
         server = smtplib.SMTP(smtp_host, smtp_port, timeout=15)
-        server.set_debuglevel(1) # Logga i dettagli della connessione
         server.starttls()
         server.login(smtp_user, smtp_pass)
         server.send_message(msg)
         server.quit()
-        logger.info(f"Reset email sent to {email} via {smtp_host}")
+        logger.info(f"Reset email sent successfully to {email} via Gmail")
         return True
     except Exception as e:
-        logger.error(f"Failed to send email via {smtp_host}: {e}")
+        logger.error(f"Failed to send email via Gmail: {e}")
         return False
 
 # ============== AUTH HELPERS ==============
