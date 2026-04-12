@@ -8,6 +8,22 @@ const CACHE_KEYS = {
   LAST_SYNC: 'last_sync_time'
 };
 
+// Helper per ottenere la chiave specifica dell'utente
+async function getUserKey(baseKey: string): Promise<string> {
+  try {
+    const userJson = await AsyncStorage.getItem('user_data');
+    if (userJson) {
+      const user = JSON.parse(userJson);
+      if (user && user.user_id) {
+        return `${user.user_id}_${baseKey}`;
+      }
+    }
+  } catch (e) {
+    console.error('Error getting user_id for key:', e);
+  }
+  return baseKey;
+}
+
 const CACHE_EXPIRY = 1000 * 60 * 30; // 30 minutes
 
 interface CachedData<T> {
@@ -69,7 +85,8 @@ export async function cacheFeeds(feeds: Feed[]): Promise<void> {
 // Saved articles for offline reading (no expiry)
 export async function getSavedArticles(): Promise<Article[]> {
   try {
-    const saved = await AsyncStorage.getItem(CACHE_KEYS.SAVED_ARTICLES);
+    const key = await getUserKey(CACHE_KEYS.SAVED_ARTICLES);
+    const saved = await AsyncStorage.getItem(key);
     if (!saved) return [];
     return JSON.parse(saved);
   } catch (error) {
@@ -78,8 +95,9 @@ export async function getSavedArticles(): Promise<Article[]> {
   }
 }
 
-export async function saveArticleForOffline(article: Article): Promise<void> {
+export async function saveOfflineArticle(article: Article): Promise<void> {
   try {
+    const key = await getUserKey(CACHE_KEYS.SAVED_ARTICLES);
     const saved = await getSavedArticles();
     
     // Check if already saved
@@ -89,7 +107,7 @@ export async function saveArticleForOffline(article: Article): Promise<void> {
     
     // Add to saved list (max 50 articles)
     const updated = [article, ...saved].slice(0, 50);
-    await AsyncStorage.setItem(CACHE_KEYS.SAVED_ARTICLES, JSON.stringify(updated));
+    await AsyncStorage.setItem(key, JSON.stringify(updated));
   } catch (error) {
     console.error('Error saving article:', error);
   }
@@ -97,9 +115,10 @@ export async function saveArticleForOffline(article: Article): Promise<void> {
 
 export async function removeOfflineArticle(articleId: string): Promise<void> {
   try {
+    const key = await getUserKey(CACHE_KEYS.SAVED_ARTICLES);
     const saved = await getSavedArticles();
     const updated = saved.filter(a => a.article_id !== articleId);
-    await AsyncStorage.setItem(CACHE_KEYS.SAVED_ARTICLES, JSON.stringify(updated));
+    await AsyncStorage.setItem(key, JSON.stringify(updated));
   } catch (error) {
     console.error('Error removing article:', error);
   }
