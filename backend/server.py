@@ -161,49 +161,72 @@ class Subscription(BaseModel):
 # ============== EMAIL HELPER ==============
 
 async def send_reset_email(email: str, token: str):
-    """Send a password reset email using SMTP (Gmail)"""
-    # Forziamo 465 se non specificato, poiché SSL è più probabile che passi su Render
+    """Send a password reset email using Resend API (to bypass Render SMTP block)"""
+    resend_api_key = os.environ.get("RESEND_API_KEY")
+
+    # Se non c'è l'API key di Resend, proviamo comunque SMTP come fallback
+    if not resend_api_key:
+        logger.warning("RESEND_API_KEY not configured. Falling back to SMTP.")
+        return await send_reset_email_smtp(email, token)
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(
+                "https://api.resend.com/emails",
+                headers={
+                    "Authorization": f"Bearer {resend_api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "from": "OKNews24 <onboarding@resend.dev>",
+                    "to": email,
+                    "subject": "Reimpostazione Password - OKNews24",
+                    "html": f"""
+                        <h3>Ciao!</h3>
+                        <p>Hai richiesto di reimpostare la password per OKNews24.</p>
+                        <p>Usa il seguente codice nell'app:</p>
+                        <h2 style="color: #3B82F6;">{token}</h2>
+                        <p>Il team di OKNews24</p>
+                    """
+                }
+            )
+            if response.status_code in [200, 201]:
+                logger.info(f"Reset email sent successfully via Resend API to {email}")
+                return True
+            else:
+                logger.error(f"Resend API error: {response.text}")
+                return False
+        except Exception as e:
+            logger.error(f"Failed to send email via Resend API: {e}")
+            return False
+
+async def send_reset_email_smtp(email: str, token: str):
+    """Legacy SMTP send (kept for local development)"""
     smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
     smtp_port = int(os.environ.get("SMTP_PORT", 465))
     smtp_user = os.environ.get("SMTP_USER")
     smtp_pass = os.environ.get("SMTP_PASSWORD")
 
     if not smtp_user or not smtp_pass:
-        logger.error("SMTP credentials not configured. Cannot send email.")
         return False
 
     msg = MIMEMultipart()
     msg['From'] = f"OKNews24 <{smtp_user}>"
     msg['To'] = email
     msg['Subject'] = "Reimpostazione Password - OKNews24"
-
-    body = f"""
-    Ciao,
-
-    Hai richiesto di reimpostare la password per il tuo account OKNews24.
-    Usa il seguente codice nell'app per procedere:
-
-    CODICE DI RESET: {token}
-
-    Il team di OKNews24
-    """
-    msg.attach(MIMEText(body, 'plain'))
+    msg.attach(MIMEText(f"Codice di reset: {token}", 'plain'))
 
     try:
-        # Se usiamo la porta 465, usiamo SMTP_SSL (connessione criptata dall'inizio)
         if smtp_port == 465:
-            server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=20)
+            server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=10)
         else:
-            server = smtplib.SMTP(smtp_host, smtp_port, timeout=20)
+            server = smtplib.SMTP(smtp_host, smtp_port, timeout=10)
             server.starttls()
-
         server.login(smtp_user, smtp_pass)
         server.send_message(msg)
         server.quit()
-        logger.info(f"Reset email sent successfully via Gmail on port {smtp_port}")
         return True
-    except Exception as e:
-        logger.error(f"Failed to send email via Gmail (Port {smtp_port}): {e}")
+    except:
         return False
 
 # ============== AUTH HELPERS ==============
