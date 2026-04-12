@@ -86,6 +86,16 @@ export const getArticles = (feedId?: string, limit?: number, skip?: number) => {
 export const getArticle = (articleId: string) => 
   api.get<Article>(`/articles/${articleId}`);
 
+// Saved Articles (Private)
+export const getSavedArticlesApi = () =>
+  api.get<Article[]>('/articles/saved');
+
+export const saveArticleApi = (articleId: string) =>
+  api.post(`/articles/save/${articleId}`);
+
+export const unsaveArticleApi = (articleId: string) =>
+  api.delete(`/articles/save/${articleId}`);
+
 export const refreshArticles = () => api.post('/articles/refresh');
 
 export const getFeeds = () => api.get<Feed[]>('/feeds');

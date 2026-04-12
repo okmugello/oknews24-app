@@ -12,8 +12,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
-import { Article } from '../../services/api';
-import { getSavedArticles, removeOfflineArticle, getCacheSize, clearAllCache } from '../../services/offlineStorage';
+import { Article, getSavedArticlesApi, unsaveArticleApi } from '../../services/api';
+import { getSavedArticles, removeOfflineArticle, getCacheSize, clearAllCache, saveOfflineArticle } from '../../services/offlineStorage';
 import ArticleCard from '../../components/ArticleCard';
 import LoadingSpinner from '../../components/LoadingSpinner';
 
@@ -27,8 +27,26 @@ export default function SavedArticlesScreen() {
 
   const loadSavedArticles = useCallback(async () => {
     try {
+      // 1. Prova a caricare dal server (Articoli PRIVATI)
+      let remoteSaved: Article[] = [];
+      try {
+        const response = await getSavedArticlesApi();
+        remoteSaved = response.data;
+
+        // Opzionale: Sincronizza in locale per lettura offline
+        for (const art of remoteSaved) {
+          await saveOfflineArticle(art);
+        }
+      } catch (err) {
+        console.error('Error fetching remote saved articles:', err);
+      }
+
+      // 2. Carica comunque dalla cache locale per sicurezza (e per velocità)
       const saved = await getSavedArticles();
+
+      // Unisci e rimuovi duplicati se necessario
       setArticles(saved);
+
       const size = await getCacheSize();
       setCacheSize(size);
     } catch (error) {
@@ -58,8 +76,15 @@ export default function SavedArticlesScreen() {
           text: 'Rimuovi',
           style: 'destructive',
           onPress: async () => {
-            await removeOfflineArticle(articleId);
-            loadSavedArticles();
+            try {
+              // Rimuovi dal server (Privato)
+              await unsaveArticleApi(articleId);
+              // Rimuovi dalla cache locale (Offline)
+              await removeOfflineArticle(articleId);
+              loadSavedArticles();
+            } catch (err) {
+              Alert.alert('Errore', 'Impossibile rimuovere l\'articolo');
+            }
           }
         }
       ]
