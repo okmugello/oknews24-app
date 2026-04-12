@@ -1,0 +1,68 @@
+{
+  "project_info": {
+    "project_number": "977075876537",
+    "project_id": "ok-mugello-tl1zpr",
+    "storage_bucket": "ok-mugello-tl1zpr.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:977075876537:android:fe964872f30059e6bee168",
+        "android_client_info": {
+          "package_name": "com.oknews.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "977075876537-4c7bhkcl1ldpalc0p1l23tprcd5oh08s.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD1YIdUpmjjISs6-rTKhzKm8oWgC5gyvR4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "977075876537-4c7bhkcl1ldpalc0p1l23tprcd5oh08s.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:977075876537:android:01233852c379bc7fbee168",
+        "android_client_info": {
+          "package_name": "com.sindimedia.oknews24"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "977075876537-4c7bhkcl1ldpalc0p1l23tprcd5oh08s.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD1YIdUpmjjISs6-rTKhzKm8oWgC5gyvR4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "977075876537-4c7bhkcl1ldpalc0p1l23tprcd5oh08s.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
