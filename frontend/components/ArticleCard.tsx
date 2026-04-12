@@ -3,9 +3,9 @@ import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
-import { Article } from '../services/api';
+import { Article, saveArticleApi, unsaveArticleApi } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
-import { isArticleSaved, saveArticleForOffline, removeOfflineArticle } from '../services/offlineStorage';
+import { isArticleSaved, saveOfflineArticle, removeOfflineArticle } from '../services/offlineStorage';
 
 interface ArticleCardProps {
   article: Article;
@@ -28,13 +28,24 @@ export default function ArticleCard({ article, onPress, showRemove, onRemove }: 
   };
 
   const handleToggleSave = async () => {
-    if (isSaved) {
-      await removeOfflineArticle(article.article_id);
-      setIsSaved(false);
-      if (onRemove) onRemove();
-    } else {
-      await saveArticleForOffline(article);
-      setIsSaved(true);
+    try {
+      if (isSaved) {
+        await unsaveArticleApi(article.article_id);
+        await removeOfflineArticle(article.article_id);
+        setIsSaved(false);
+        if (onRemove) onRemove();
+      } else {
+        await saveArticleApi(article.article_id);
+        await saveOfflineArticle(article);
+        setIsSaved(true);
+      }
+    } catch (error) {
+      console.log('Error toggling save:', error);
+      // In case of API error, we still try to save offline if possible
+      if (!isSaved) {
+        await saveOfflineArticle(article);
+        setIsSaved(true);
+      }
     }
   };
 
