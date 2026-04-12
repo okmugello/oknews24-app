@@ -171,6 +171,9 @@ async def send_reset_email(email: str, token: str):
 
     async with httpx.AsyncClient() as client:
         try:
+            # Assicuriamoci che il mittente sia esattamente quello verificato su Resend
+            sender = "OKNews24 <no-reply@oknews24.it>"
+
             response = await client.post(
                 "https://api.resend.com/emails",
                 headers={
@@ -178,15 +181,16 @@ async def send_reset_email(email: str, token: str):
                     "Content-Type": "application/json"
                 },
                 json={
-                    "from": "OKNews24 <no-reply@oknews24.it>",
+                    "from": sender,
                     "to": email,
                     "subject": "Reimpostazione Password - OKNews24",
                     "html": f"""
-                        <h3>Ciao!</h3>
-                        <p>Hai richiesto di reimpostare la password per OKNews24.</p>
-                        <p>Usa il seguente codice nell'app:</p>
-                        <h2 style="color: #3B82F6;">{token}</h2>
-                        <p>Il team di OKNews24</p>
+                        <div style="font-family: sans-serif; padding: 20px;">
+                            <h2>Codice di Reset Password</h2>
+                            <p>Il tuo codice di sicurezza è:</p>
+                            <h1 style="color: #3B82F6;">{token}</h1>
+                            <p>Inseriscilo nell'app per procedere.</p>
+                        </div>
                     """
                 }
             )
