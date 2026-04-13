@@ -167,6 +167,9 @@ export const adminCreateUser = (data: { email: string; name: string; password: s
 
 export const deduplicateArticles = () => api.post('/admin/articles/deduplicate');
 
+export const getArticleGallery = (articleId: string) =>
+  api.get<{ images: string[]; article_id: string }>(`/articles/${articleId}/gallery`);
+
 export const getAdminStats = () => api.get('/admin/stats');
 
 export default api;

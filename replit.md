@@ -68,9 +68,20 @@ Il frontend rileva automaticamente l'URL del backend:
 
 Il token di sessione è il JWT `access_token` di Supabase Auth, inviato come `Bearer` a ogni richiesta backend.
 
+## Feed Sources (5 feed attivi)
+
+1. `OK Mugello` — https://www.okmugello.it/mugello/feed/ (categoria: mugello)
+2. `OK Valdisieve` — https://www.okvaldisieve.it/feed (categoria: valdisieve)
+3. `OK Firenze` — https://www.okfirenze.com/feed (categoria: firenze)
+4. `OK Mugello Magazine` — https://www.okmugello.it/magazine/feed (categoria: magazine)
+5. `OK Sport` — https://www.okmugello.it/sport/feed (categoria: sport)
+
 ## Features
 
-- Aggregazione RSS da fonti news toscane (OK Mugello e comuni limitrofi)
+- Aggregazione RSS da 5 fonti news toscane
+- Estrazione immagini da media:content, media:thumbnail, enclosures o HTML img tag
+- **Galleria foto**: endpoint `/api/articles/{id}/gallery` scrapa `tb-gallery-container` dalla pagina web; fallback alle immagini inline del content RSS
+- **Link cliccabili**: link nel content estratti in sezione "Link correlati" con Linking.openURL
 - Modello freemium: 5 articoli gratuiti, poi abbonamento mensile/annuale
 - Abbonamento via Stripe Checkout
 - Push notification via Expo Push API

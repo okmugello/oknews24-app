@@ -680,6 +680,54 @@ async def get_articles(
     return articles
 
 
+@api_router.get("/articles/{article_id}/gallery")
+async def get_article_gallery(article_id: str):
+    """Scrapa la pagina dell'articolo e restituisce le immagini della galleria."""
+    rows = await DB.select("articles", {"article_id": f"eq.{article_id}"})
+    if not rows:
+        raise HTTPException(404, "Articolo non trovato")
+
+    link = rows[0].get("link", "")
+    if not link:
+        return {"images": [], "article_id": article_id}
+
+    try:
+        async with httpx.AsyncClient(timeout=12, follow_redirects=True) as client:
+            r = await client.get(link, headers={"User-Agent": "Mozilla/5.0 (compatible; OKNews24/1.0)"})
+            html = r.text
+
+        # Estrai immagini dalla galleria tb-gallery-container (plugin okmugello.it)
+        gallery_match = re.search(
+            r'<div[^>]+tb-gallery-container[^>]*>([\s\S]+?)(?=<div[^>]+(?:class|id)=(?!.*item)["\'][^"\']*(?!item)[^"\']*["\']|\Z)',
+            html, re.IGNORECASE
+        )
+
+        if not gallery_match:
+            # Fallback: cerca qualsiasi blocco con classe gallery/carousel
+            gallery_match = re.search(
+                r'<div[^>]+class="[^"]*(?:gallery|tb-gallery|carousel_snap)[^"]*"[^>]*>([\s\S]+?)</div>\s*</div>',
+                html, re.IGNORECASE
+            )
+
+        if gallery_match:
+            gallery_html = gallery_match.group(0)
+            # Estrai tutti gli src delle img nella galleria (evita placeholder)
+            images = [
+                src for src in re.findall(
+                    r'<img[^>]+src=["\']([^"\']+)["\']', gallery_html, re.IGNORECASE
+                )
+                if "placeholder" not in src.lower() and src.startswith("http")
+            ]
+            if images:
+                return {"images": images, "article_id": article_id}
+
+        return {"images": [], "article_id": article_id}
+
+    except Exception as e:
+        logger.warning(f"Gallery fetch error for {article_id}: {e}")
+        return {"images": [], "article_id": article_id}
+
+
 @api_router.get("/articles/{article_id}")
 async def get_article(article_id: str, request: Request):
     user = await get_current_user(request)
