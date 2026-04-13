@@ -1,15 +1,20 @@
 import React from 'react';
-import { Tabs } from 'expo-router';
+import { Tabs, Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 
 export default function TabLayout() {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const isAdmin = user?.role === 'admin';
+
+  // If not authenticated (and not still loading), redirect to login
+  if (!isLoading && !user) {
+    return <Redirect href="/(auth)/login" />;
+  }
 
   return (
     <Tabs
