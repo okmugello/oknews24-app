@@ -15,7 +15,7 @@ from typing import List, Optional
 from datetime import datetime, timezone, timedelta
 
 ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+load_dotenv(ROOT_DIR / '.env', override=True)
 
 # ============== CONFIG ==============
 
