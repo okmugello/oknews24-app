@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 import os
+import re
 import logging
 import httpx
 import feedparser
@@ -731,6 +732,62 @@ async def unsave_article(article_id: str, request: Request):
     return {"message": "Articolo rimosso dai salvati"}
 
 
+def _extract_first_img(html: str) -> Optional[str]:
+    """Estrai il primo src di un tag <img> dall'HTML, escludendo pixel tracker."""
+    if not html:
+        return None
+    match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', html, re.IGNORECASE)
+    if match:
+        src = match.group(1)
+        # Escludi pixel tracker e icone
+        skip_patterns = ["pixel", "1x1", "gravatar", "avatar", "icon", "emoji", "logo", "badge"]
+        if any(x in src.lower() for x in skip_patterns):
+            return None
+        return src
+    return None
+
+
+def _get_entry_image(entry) -> Optional[str]:
+    """Estrai l'immagine principale da un entry feedparser (WordPress/standard RSS)."""
+    # 1. media:content — standard WordPress/Jetpack
+    if hasattr(entry, "media_content") and entry.media_content:
+        for mc in entry.media_content:
+            url = mc.get("url", "")
+            if url:
+                medium = mc.get("medium", "")
+                # Prendi solo media di tipo immagine, o URL con estensione immagine
+                if medium == "image" or any(url.lower().split("?")[0].endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]):
+                    return url
+        # Fallback: primo media_content qualunque
+        url = entry.media_content[0].get("url", "")
+        if url:
+            return url
+
+    # 2. media:thumbnail
+    if hasattr(entry, "media_thumbnail") and entry.media_thumbnail:
+        url = entry.media_thumbnail[0].get("url", "")
+        if url:
+            return url
+
+    # 3. enclosures
+    if hasattr(entry, "enclosures") and entry.enclosures:
+        for enc in entry.enclosures:
+            href = enc.get("href", "") or enc.get("url", "")
+            t = enc.get("type", "")
+            if t.startswith("image") or any(href.lower().split("?")[0].endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".webp"]):
+                if href:
+                    return href
+
+    # 4. Prima immagine nel content:encoded o summary (HTML parsing)
+    html_content = ""
+    if hasattr(entry, "content") and entry.content:
+        html_content = entry.content[0].get("value", "")
+    if not html_content:
+        html_content = getattr(entry, "summary", "") or ""
+
+    return _extract_first_img(html_content)
+
+
 @api_router.post("/articles/refresh")
 async def refresh_articles(request: Request):
     await require_admin(request)
@@ -745,12 +802,12 @@ async def refresh_articles(request: Request):
     for feed in feeds:
         try:
             parsed = feedparser.parse(feed["url"])
-            for entry in parsed.entries[:20]:
+            for entry in parsed.entries[:30]:
                 link = entry.get("link", "")
                 if not link:
                     continue
 
-                # Check duplicate
+                # Salta duplicati
                 existing = await DB.select("articles", {"link": f"eq.{link}"})
                 if existing:
                     continue
@@ -762,17 +819,19 @@ async def refresh_articles(request: Request):
                     except Exception:
                         pass
 
-                image_url = None
-                if hasattr(entry, "media_thumbnail") and entry.media_thumbnail:
-                    image_url = entry.media_thumbnail[0].get("url")
-                elif hasattr(entry, "enclosures") and entry.enclosures:
-                    enc = entry.enclosures[0]
-                    if enc.get("type", "").startswith("image"):
-                        image_url = enc.get("href") or enc.get("url")
+                # Estrai immagine con logica migliorata
+                image_url = _get_entry_image(entry)
 
-                description = entry.get("summary", "")
-                if description and len(description) > 500:
-                    description = description[:500] + "..."
+                # Mantieni HTML completo per description e content
+                description = getattr(entry, "summary", "") or ""
+                content_html = ""
+                if hasattr(entry, "content") and entry.content:
+                    content_html = entry.content[0].get("value", "")
+                # Se l'image_url non è stata trovata via media tag, prova dal content
+                if not image_url:
+                    image_url = _extract_first_img(content_html) or _extract_first_img(description)
+
+                author = getattr(entry, "author", "") or ""
 
                 article_id = f"art_{uuid.uuid4().hex[:12]}"
                 await DB.insert("articles", {
@@ -782,10 +841,10 @@ async def refresh_articles(request: Request):
                     "category": feed.get("category", "general"),
                     "title": entry.get("title", "Senza titolo"),
                     "description": description,
-                    "content": entry.get("content", [{}])[0].get("value", "") if hasattr(entry, "content") else "",
+                    "content": content_html,
                     "link": link,
                     "image_url": image_url,
-                    "author": entry.get("author", ""),
+                    "author": author,
                     "pub_date": pub_date,
                 })
                 added += 1
@@ -1243,14 +1302,10 @@ async def initial_setup():
         return {"message": "Already initialized"}
 
     default_feeds = [
-        {"name": "OK Mugello", "url": "https://www.okmugello.it/mugello/feed", "category": "mugello"},
+        {"name": "OK Mugello", "url": "https://www.okmugello.it/mugello/feed/", "category": "mugello"},
+        {"name": "OK Valdisieve", "url": "https://www.okvaldisieve.it/feed", "category": "valdisieve"},
+        {"name": "OK Firenze", "url": "https://www.okfirenze.com/feed", "category": "firenze"},
         {"name": "OK Mugello Magazine", "url": "https://www.okmugello.it/magazine/feed", "category": "magazine"},
-        {"name": "OK Scarperia", "url": "https://www.okmugello.it/scarperia/feed", "category": "scarperia"},
-        {"name": "OK Barberino", "url": "https://www.okmugello.it/barberino-di-mugello/feed", "category": "barberino"},
-        {"name": "OK Borgo San Lorenzo", "url": "https://www.okmugello.it/borgo-san-lorenzo/feed", "category": "borgo"},
-        {"name": "OK Firenzuola", "url": "https://www.okmugello.it/firenzuola/feed", "category": "firenzuola"},
-        {"name": "OK Palazzuolo", "url": "https://www.okmugello.it/palazzuolo-sul-senio/feed", "category": "palazzuolo"},
-        {"name": "OK Vicchio", "url": "https://www.okmugello.it/vicchio/feed", "category": "vicchio"},
         {"name": "OK Sport", "url": "https://www.okmugello.it/sport/feed", "category": "sport"},
     ]
 
