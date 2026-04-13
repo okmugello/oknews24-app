@@ -1,56 +1,78 @@
 # OKNews24
 
-A mobile news reader app that aggregates RSS feeds from Tuscan local news sources, built with React Native/Expo and a FastAPI backend.
+App mobile per la lettura di news locali toscane da feed RSS, costruita con React Native/Expo e un backend FastAPI Python.
 
-## Architecture
+## Architecture (v2 - Supabase Edition)
 
-- **Frontend**: React Native + Expo (TypeScript), Expo Router for file-based navigation
-- **Backend**: FastAPI (Python) with Motor (async MongoDB driver)
-- **Database**: MongoDB (external, connected via `MONGO_URL` secret)
-- **Auth**: JWT-based authentication
-- **Payments**: Stripe integration (configured via environment variables)
+- **Frontend**: React Native + Expo (TypeScript), Expo Router, porta 5000
+- **Backend**: FastAPI (Python), httpx per chiamate REST a Supabase, porta 8000
+- **Database**: Supabase PostgreSQL (progetto: `iencfxwfopjvwhuhmvsa`)
+- **Auth**: Supabase Auth (email/password + Google OAuth via Supabase)
+- **Email**: Resend API per email transazionali (reset password)
+- **Payments**: Stripe integration
 
 ## Project Structure
 
 ```
-frontend/     - Expo React Native app
-  app/        - File-based routes (Expo Router)
-  components/ - Reusable UI components
-  contexts/   - Auth and Theme React contexts
-  services/   - API service layer (api.ts)
-  assets/     - Fonts, images
+frontend/
+  app/          - File-based routes (Expo Router)
+  components/   - UI components riutilizzabili
+  contexts/     - AuthContext (Supabase), ThemeContext
+  services/     - api.ts (axios client verso backend:8000)
+  lib/          - supabase.ts (client @supabase/supabase-js)
+  assets/       - Font, immagini
 backend/
-  server.py   - FastAPI server with all endpoints
+  server.py     - FastAPI server (Supabase edition, NO MongoDB)
+  .env          - Chiavi JWT Supabase (non usare secrets Replit che hanno formato sbagliato)
   requirements.txt
-memory/       - PRD and project docs
-tests/        - Test files
+supabase/
+  schema.sql    - Schema PostgreSQL da eseguire nel SQL Editor di Supabase
 ```
 
 ## Workflows
 
-- **Start application**: `cd frontend && npx expo start --web --port 5000` (port 5000, webview)
-- **Start Backend**: `cd backend && uvicorn server:app --host 0.0.0.0 --port 8000 --reload` (port 8000, console)
+- **Start application**: `cd frontend && npx expo start --web --port 5000`
+- **Start Backend**: `cd backend && uvicorn server:app --host 0.0.0.0 --port 8000 --reload`
 
-## Key Environment Variables / Secrets
+## Secrets / Environment Variables
 
-- `MONGO_URL` - MongoDB connection string (required)
-- `JWT_SECRET` - JWT signing secret (optional, defaults to dev value)
-- `STRIPE_SECRET_KEY` - Stripe secret key (optional)
-- `STRIPE_PUBLISHABLE_KEY` - Stripe publishable key (optional)
-- `SMTP_HOST`, `SMTP_PORT` - Email configuration (optional)
+- `SUPABASE_URL` = `https://iencfxwfopjvwhuhmvsa.supabase.co`
+- `SUPABASE_ANON_KEY` - chiave JWT anon (deve iniziare con `eyJ...`)
+- `SUPABASE_SERVICE_ROLE_KEY` - chiave JWT service role (deve iniziare con `eyJ...`)
+  - **NOTA**: Le chiavi reali sono salvate in `backend/.env` (formato JWT corretto)
+  - I secrets Replit hanno ancora il formato `sb_secret_/sb_publishable_` sbagliato
+- `RESEND_API_KEY` - API key Resend per email
+- `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET` - Stripe (opzionali)
+
+## ⚠️ Setup Richiesto: Esegui Schema SQL in Supabase
+
+Le tabelle PostgreSQL devono essere create eseguendo `supabase/schema.sql` nel
+**SQL Editor** di Supabase: https://supabase.com/dashboard/project/iencfxwfopjvwhuhmvsa/sql/new
+
+Tabelle create:
+- `profiles` - profili utente (estende auth.users, trigger auto-create)
+- `feeds` - feed RSS
+- `articles` - articoli aggregati
+- `saved_articles` - articoli salvati per utente
+- `subscriptions` - abbonamenti Stripe
+- `push_tokens` - token push notification
+- `password_resets` - token reset password custom (6 char, 1 ora)
+- `stripe_config` - cache configurazione Stripe
 
 ## API Configuration
 
-The frontend automatically detects the backend URL:
-- On web: uses `window.location.hostname:8000/api`
-- On native: uses `localhost:8000/api`
-- Override with `EXPO_PUBLIC_BACKEND_URL` env var
+Il frontend rileva automaticamente l'URL del backend:
+- Web: `window.location.hostname:8000/api`
+- Native: `localhost:8000/api`
+- Override: `EXPO_PUBLIC_BACKEND_URL`
+
+Il token di sessione è il JWT `access_token` di Supabase Auth, inviato come `Bearer` a ogni richiesta backend.
 
 ## Features
 
-- RSS feed aggregation from Tuscan news sources
-- Freemium model: 5 free articles, then subscription required
-- Monthly/yearly subscription via Stripe
-- Push notifications via Expo
-- Admin panel for feed management
-- JWT authentication with email/password
+- Aggregazione RSS da fonti news toscane (OK Mugello e comuni limitrofi)
+- Modello freemium: 5 articoli gratuiti, poi abbonamento mensile/annuale
+- Abbonamento via Stripe Checkout
+- Push notification via Expo Push API
+- Pannello admin per gestione feed, utenti, articoli
+- Reset password via codice email (Resend)
