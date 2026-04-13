@@ -1,6 +1,6 @@
 {
   "cli": {
-    "version": ">= 3.0.0",
+    "version": ">= 16.0.0",
     "appVersionSource": "remote"
   },
   "build": {
@@ -28,20 +28,20 @@
         "autoIncrement": true
       },
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://oknews24-backend.onrender.com"
+        "EXPO_PUBLIC_BACKEND_URL": "https://INSERIRE_URL_REPLIT_DEPLOY_QUI/api"
       }
     }
   },
   "submit": {
     "production": {
       "ios": {
-        "appleId": "YOUR_APPLE_ID",
-        "ascAppId": "YOUR_ASC_APP_ID",
-        "appleTeamId": "YOUR_TEAM_ID"
+        "appleId": "info@oknews24.it",
+        "ascAppId": "",
+        "appleTeamId": ""
       },
       "android": {
         "serviceAccountKeyPath": "./google-play-service-account.json",
-        "track": "production"
+        "track": "internal"
       }
     }
   }
