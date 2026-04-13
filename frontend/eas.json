@@ -28,7 +28,7 @@
         "autoIncrement": true
       },
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://INSERIRE_URL_REPLIT_DEPLOY_QUI/api"
+        "EXPO_PUBLIC_BACKEND_URL": "https://oknews-24-app.replit.app/api"
       }
     }
   },
