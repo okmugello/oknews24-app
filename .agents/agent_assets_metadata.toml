@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "G2T_yLXrHz4FprMiH-iHc"
+uri = "file://expo-qrcode.png"
+type = "image"
+title = "QR Code Expo Go - OKNews24"
