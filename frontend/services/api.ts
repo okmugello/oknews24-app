@@ -3,9 +3,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || `https://${process.env.EXPO_PUBLIC_REPLIT_DOMAIN}/api`;
+
 const api = axios.create({
-  // Prova ad aggiungere /api alla fine se il 404 persiste
-  baseURL: "https://oknews24-backend.onrender.com/api",
+  baseURL: BACKEND_URL,
   timeout: 40000,
   headers: {
     'Content-Type': 'application/json',
