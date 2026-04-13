@@ -17,11 +17,6 @@
         "UIBackgroundModes": [
           "remote-notification"
         ]
-      },
-      "config": {
-        "googleSignIn": {
-          "reservedClientId": "com.googleusercontent.apps.YOUR_IOS_CLIENT_ID"
-        }
       }
     },
     "android": {
