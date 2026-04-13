@@ -10,6 +10,7 @@ packages = ["cargo", "libiconv", "libxcrypt", "rustc"]
 
 [userenv.shared]
 EXPO_PUBLIC_REPLIT_DOMAIN = "795bc112-facf-4a42-9192-41eebd54867d-00-3ezfb1lphzzsp.worf.replit.dev"
+NGROK_AUTHTOKEN = "3CJbH9bFsdoMrqjeHUxJiQUjqB6_2ctNUcfErxibknST4yDNa"
 
 [workflows]
 runButton = "Project"
