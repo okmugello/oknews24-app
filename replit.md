@@ -59,6 +59,10 @@ Tabelle create:
 - `password_resets` - token reset password custom (6 char, 1 ora)
 - `stripe_config` - cache configurazione Stripe
 
+## Preferenze utente
+
+- **GitHub push automatico**: al termine di ogni sessione di modifiche, fare sempre il push su GitHub con `git push https://okmugello:${GITHUB_PERSONAL_ACCESS_TOKEN}@github.com/okmugello/oknews24-app.git main`
+
 ## API Configuration
 
 Il frontend rileva automaticamente l'URL del backend:
