@@ -66,7 +66,7 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd frontend && NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN} npx expo start --tunnel"
+args = "cd frontend && NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN} CI=1 npx expo start --tunnel --non-interactive"
 
 [[ports]]
 localPort = 5000
