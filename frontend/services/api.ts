@@ -176,4 +176,17 @@ export const getArticleGallery = (articleId: string) =>
 
 export const getAdminStats = () => api.get('/admin/stats');
 
+// Push Notifications
+export const registerPushToken = (pushToken: string) =>
+  api.post('/notifications/register', { push_token: pushToken });
+
+export const unregisterPushToken = (pushToken: string) =>
+  api.post('/notifications/unregister', { push_token: pushToken });
+
+export const getNotificationSettings = () =>
+  api.get<{ enabled: boolean; push_token: string | null }>('/notifications/settings');
+
+export const sendPushNotification = (title: string, message: string) =>
+  api.post('/notifications/send', { title, message });
+
 export default api;

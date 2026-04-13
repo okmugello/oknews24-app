@@ -4,11 +4,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
+import { usePushNotifications } from '../../hooks/usePushNotifications';
 
 export default function TabLayout() {
   const { user, isLoading } = useAuth();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const isAuthenticated = !isLoading && !!user;
+
+  usePushNotifications(isAuthenticated);
   const isAdmin = user?.role === 'admin';
 
   // If not authenticated (and not still loading), redirect to login
