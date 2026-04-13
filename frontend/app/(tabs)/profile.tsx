@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Alert,
   Image,
   Switch
 } from 'react-native';
@@ -35,22 +34,12 @@ export default function ProfileScreen() {
     } catch {}
   };
 
-  const handleLogout = () => {
-    Alert.alert(
-      'Esci',
-      'Sei sicuro di voler uscire?',
-      [
-        { text: 'Annulla', style: 'cancel' },
-        {
-          text: 'Esci',
-          style: 'destructive',
-          onPress: async () => {
-            await logout();
-            router.replace('/(auth)/login');
-          }
-        }
-      ]
-    );
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (e) {
+      // logout clears state regardless
+    }
   };
 
   const handleThemeChange = () => {
