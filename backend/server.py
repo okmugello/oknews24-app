@@ -249,6 +249,8 @@ class RssFeedCreate(BaseModel):
 
 class SubscriptionCreate(BaseModel):
     plan_type: str
+    success_url: Optional[str] = None
+    cancel_url: Optional[str] = None
 
 class AdminUserCreate(BaseModel):
     email: EmailStr
@@ -913,34 +915,67 @@ async def get_or_create_stripe_prices():
     if not stripe.api_key:
         return
 
-    # Check cache in DB
-    cached = await DB.select("stripe_config", {"type": "eq.main"})
-    if cached:
-        STRIPE_PRICES["monthly"] = cached[0].get("monthly_price_id")
-        STRIPE_PRICES["yearly"] = cached[0].get("yearly_price_id")
-        if STRIPE_PRICES["monthly"] and STRIPE_PRICES["yearly"]:
-            return
-
-    # Create product and prices
+    # Try to get from DB cache (table may not exist — ignore errors)
     try:
-        product = stripe.Product.create(name="OKNews24 Premium", description="Accesso illimitato a tutte le notizie")
-        monthly_price = stripe.Price.create(
-            product=product.id, unit_amount=400, currency="eur",
-            recurring={"interval": "month"}, nickname="Piano Mensile"
-        )
-        yearly_price = stripe.Price.create(
-            product=product.id, unit_amount=3600, currency="eur",
-            recurring={"interval": "year"}, nickname="Piano Annuale"
-        )
-        STRIPE_PRICES["monthly"] = monthly_price.id
-        STRIPE_PRICES["yearly"] = yearly_price.id
+        cached = await DB.select("stripe_config", {"type": "eq.main"})
+        if cached:
+            STRIPE_PRICES["monthly"] = cached[0].get("monthly_price_id")
+            STRIPE_PRICES["yearly"] = cached[0].get("yearly_price_id")
+            if STRIPE_PRICES["monthly"] and STRIPE_PRICES["yearly"]:
+                return
+    except Exception:
+        pass
 
-        await DB.upsert("stripe_config", {
-            "type": "main",
-            "monthly_price_id": monthly_price.id,
-            "yearly_price_id": yearly_price.id,
-            "product_id": product.id,
-        })
+    try:
+        # Search for existing OKNews24 Premium product in Stripe
+        products = stripe.Product.list(limit=20, active=True)
+        existing_product = None
+        for p in products.auto_paging_iter():
+            if p.name == "OKNews24 Premium":
+                existing_product = p
+                break
+
+        if existing_product:
+            # Get existing active recurring prices for this product
+            prices = stripe.Price.list(product=existing_product.id, active=True, limit=10)
+            for price in prices.auto_paging_iter():
+                interval = price.recurring.interval if price.recurring else None
+                if interval == "month" and not STRIPE_PRICES["monthly"]:
+                    STRIPE_PRICES["monthly"] = price.id
+                elif interval == "year" and not STRIPE_PRICES["yearly"]:
+                    STRIPE_PRICES["yearly"] = price.id
+            product_id = existing_product.id
+        else:
+            # Create new product
+            product = stripe.Product.create(name="OKNews24 Premium", description="Accesso illimitato a tutte le notizie")
+            product_id = product.id
+
+        # Create any missing prices
+        if not STRIPE_PRICES["monthly"]:
+            monthly_price = stripe.Price.create(
+                product=product_id, unit_amount=400, currency="eur",
+                recurring={"interval": "month"}, nickname="Piano Mensile"
+            )
+            STRIPE_PRICES["monthly"] = monthly_price.id
+
+        if not STRIPE_PRICES["yearly"]:
+            yearly_price = stripe.Price.create(
+                product=product_id, unit_amount=3600, currency="eur",
+                recurring={"interval": "year"}, nickname="Piano Annuale"
+            )
+            STRIPE_PRICES["yearly"] = yearly_price.id
+
+        # Try to cache in DB (ignore error if table doesn't exist)
+        try:
+            await DB.upsert("stripe_config", {
+                "type": "main",
+                "monthly_price_id": STRIPE_PRICES["monthly"],
+                "yearly_price_id": STRIPE_PRICES["yearly"],
+                "product_id": product_id,
+            })
+        except Exception:
+            pass
+
     except Exception as e:
         logger.error(f"Stripe setup error: {e}")
 
@@ -985,6 +1020,8 @@ async def create_checkout_session(sub_data: SubscriptionCreate, request: Request
         raise HTTPException(500, "Stripe non configurato")
 
     origin = request.headers.get("origin", "https://oknews24.it")
+    success_url = sub_data.success_url or f"{origin}/subscription?success=true&session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = sub_data.cancel_url or f"{origin}/subscription?canceled=true"
 
     try:
         profile_rows = await DB.select("profiles", {"id": f"eq.{user['id']}"})
@@ -1001,8 +1038,8 @@ async def create_checkout_session(sub_data: SubscriptionCreate, request: Request
             payment_method_types=["card"],
             line_items=[{"price": price_id, "quantity": 1}],
             mode="subscription",
-            success_url=f"{origin}/subscription?success=true&session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=f"{origin}/subscription?canceled=true",
+            success_url=success_url,
+            cancel_url=cancel_url,
             metadata={"user_id": user["id"], "plan_type": sub_data.plan_type}
         )
         return {"checkout_url": session.url, "session_id": session.id}

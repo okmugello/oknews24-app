@@ -25,6 +25,7 @@ export default function SubscriptionScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [verificationMessage, setVerificationMessage] = useState<string | null>(null);
+  const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
 
   useEffect(() => {
     loadPlans();
@@ -71,17 +72,29 @@ export default function SubscriptionScreen() {
     setIsProcessing(true);
 
     try {
-      const response = await createCheckoutSession(planId);
+      // On mobile, use oknews24.it as redirect (we'll verify manually)
+      // On web, use current origin for proper redirect
+      let successUrl: string | undefined;
+      let cancelUrl: string | undefined;
+      if (Platform.OS !== 'web') {
+        successUrl = 'https://oknews24.it/subscription?success=true&session_id={CHECKOUT_SESSION_ID}';
+        cancelUrl = 'https://oknews24.it/subscription?canceled=true';
+      }
+
+      const response = await createCheckoutSession(planId, successUrl, cancelUrl);
       const checkoutUrl = response.data.checkout_url;
+      const sessionId = response.data.session_id;
       
       if (checkoutUrl) {
-        // Open Stripe Checkout in browser
         if (Platform.OS === 'web') {
           window.location.href = checkoutUrl;
         } else {
           const canOpen = await Linking.canOpenURL(checkoutUrl);
           if (canOpen) {
             await Linking.openURL(checkoutUrl);
+            // Store session_id so user can verify manually after returning
+            setPendingSessionId(sessionId);
+            setVerificationMessage('Completa il pagamento nel browser, poi torna qui e premi "Verifica pagamento".');
           } else {
             Alert.alert('Errore', 'Impossibile aprire la pagina di pagamento');
           }
@@ -96,6 +109,25 @@ export default function SubscriptionScreen() {
     } finally {
       setIsProcessing(false);
       setSelectedPlan(null);
+    }
+  };
+
+  const handleVerifyManual = async () => {
+    if (!pendingSessionId) return;
+    setIsProcessing(true);
+    try {
+      const response = await verifyCheckoutSession(pendingSessionId);
+      if (response.data.success) {
+        await refreshUser();
+        setPendingSessionId(null);
+        setVerificationMessage('Pagamento completato con successo! Il tuo abbonamento è ora attivo.');
+      } else {
+        setVerificationMessage('Pagamento non ancora confermato. Completa il pagamento nel browser e riprova.');
+      }
+    } catch (error) {
+      setVerificationMessage('Errore nella verifica. Riprova tra qualche secondo.');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -147,15 +179,33 @@ export default function SubscriptionScreen() {
         {verificationMessage && (
           <View style={[
             styles.messageCard,
-            params.success === 'true' ? styles.successCard : styles.warningCard
+            params.success === 'true' || verificationMessage.includes('successo') ? styles.successCard : styles.warningCard
           ]}>
             <Ionicons 
-              name={params.success === 'true' ? 'checkmark-circle' : 'information-circle'} 
+              name={params.success === 'true' || verificationMessage.includes('successo') ? 'checkmark-circle' : 'information-circle'} 
               size={24} 
-              color={params.success === 'true' ? '#10B981' : '#F59E0B'} 
+              color={params.success === 'true' || verificationMessage.includes('successo') ? '#10B981' : '#F59E0B'} 
             />
             <Text style={styles.messageText}>{verificationMessage}</Text>
           </View>
+        )}
+
+        {/* Manual verification button for mobile */}
+        {pendingSessionId && Platform.OS !== 'web' && (
+          <TouchableOpacity
+            style={styles.verifyButton}
+            onPress={handleVerifyManual}
+            disabled={isProcessing}
+          >
+            {isProcessing ? (
+              <LoadingSpinner />
+            ) : (
+              <>
+                <Ionicons name="checkmark-circle-outline" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+                <Text style={styles.verifyButtonText}>Verifica pagamento</Text>
+              </>
+            )}
+          </TouchableOpacity>
         )}
 
         {/* Hero Section */}
@@ -493,6 +543,20 @@ const styles = StyleSheet.create({
   },
   subscribeButtonTextHighlighted: {
     color: '#FFFFFF'
+  },
+  verifyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#10B981',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16
+  },
+  verifyButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600'
   },
   cancelButton: {
     backgroundColor: '#FEE2E2',

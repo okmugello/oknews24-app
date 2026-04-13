@@ -127,8 +127,12 @@ export const deleteFeed = (feedId: string) => api.delete(`/feeds/${feedId}`);
 
 export const getPlans = () => api.get<PlansResponse>('/subscriptions/plans');
 
-export const createCheckoutSession = (planType: string) => 
-  api.post<{ checkout_url: string; session_id: string }>('/subscriptions/create-checkout-session', { plan_type: planType });
+export const createCheckoutSession = (planType: string, successUrl?: string, cancelUrl?: string) => 
+  api.post<{ checkout_url: string; session_id: string }>('/subscriptions/create-checkout-session', {
+    plan_type: planType,
+    ...(successUrl && { success_url: successUrl }),
+    ...(cancelUrl && { cancel_url: cancelUrl }),
+  });
 
 export const verifyCheckoutSession = (sessionId: string) =>
   api.get<{ success: boolean; plan_type?: string; status?: string; message?: string }>(`/subscriptions/verify-session/${sessionId}`);
