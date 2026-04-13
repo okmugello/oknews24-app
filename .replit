@@ -27,6 +27,10 @@ args = "Start Backend"
 task = "workflow.run"
 args = "Start application"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start Mobile (Tunnel)"
+
 [[workflows.workflow]]
 name = "Start Backend"
 author = "agent"
@@ -50,6 +54,17 @@ waitForPort = 5000
 
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[[workflows.workflow]]
+name = "Start Mobile (Tunnel)"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd frontend && npx expo start --tunnel"
+
+[workflows.workflow.metadata]
+outputType = "console"
 
 [[ports]]
 localPort = 5000
