@@ -1,5 +1,5 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 import os
@@ -1426,6 +1426,139 @@ app.add_middleware(
 )
 
 app.include_router(api_router)
+
+
+_HTML_STYLE = """
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         max-width: 800px; margin: 0 auto; padding: 24px 20px;
+         color: #1a1a1a; line-height: 1.7; }
+  h1 { color: #1d4ed8; font-size: 1.8rem; border-bottom: 2px solid #e5e7eb; padding-bottom: 12px; }
+  h2 { color: #1e40af; font-size: 1.2rem; margin-top: 28px; }
+  a  { color: #2563eb; }
+  p, li { color: #374151; }
+  footer { margin-top: 40px; color: #9ca3af; font-size: 0.85rem; border-top: 1px solid #e5e7eb; padding-top: 16px; }
+</style>
+"""
+
+@app.get("/privacy-policy", response_class=HTMLResponse)
+async def privacy_policy():
+    return HTMLResponse(f"""<!DOCTYPE html><html lang="it"><head>{_HTML_STYLE}
+<title>Privacy Policy — OKNews24</title></head><body>
+<h1>Privacy Policy</h1>
+<p><em>Ultimo aggiornamento: 15 aprile 2026</em></p>
+
+<p>La presente Privacy Policy descrive come <strong>Sindimedia s.r.l.</strong> ("noi", "ci") raccoglie,
+utilizza e protegge le informazioni personali degli utenti dell'applicazione <strong>OKNews24</strong>
+("l'App"), disponibile su iOS e Android.</p>
+
+<h2>1. Titolare del Trattamento</h2>
+<p>Sindimedia s.r.l. — info@oknews24.it</p>
+
+<h2>2. Dati Raccolti</h2>
+<p>Raccogliamo le seguenti categorie di dati:</p>
+<ul>
+  <li><strong>Dati di registrazione:</strong> nome, indirizzo e-mail e password (cifrata) forniti al momento della creazione dell'account.</li>
+  <li><strong>Dati di utilizzo:</strong> articoli letti, preferenze di feed, articoli salvati.</li>
+  <li><strong>Dati di pagamento:</strong> gestiti interamente da Stripe, Inc. Non conserviamo dati di carte di credito.</li>
+  <li><strong>Token di notifica push:</strong> identificativo anonimo del dispositivo per l'invio di notifiche, se il permesso è concesso.</li>
+  <li><strong>Dati tecnici:</strong> tipo di dispositivo, sistema operativo, versione dell'app.</li>
+</ul>
+
+<h2>3. Finalità del Trattamento</h2>
+<ul>
+  <li>Erogazione del servizio di lettura notizie e gestione dell'account.</li>
+  <li>Gestione degli abbonamenti e fatturazione tramite Stripe.</li>
+  <li>Invio di notifiche push relative a nuovi articoli (solo con consenso esplicito).</li>
+  <li>Miglioramento del servizio e analisi aggregate anonime.</li>
+</ul>
+
+<h2>4. Base Giuridica</h2>
+<p>Il trattamento è basato sul contratto (esecuzione del servizio), sul consenso (notifiche push) e
+sul legittimo interesse per la sicurezza e il miglioramento del servizio.</p>
+
+<h2>5. Conservazione dei Dati</h2>
+<p>I dati vengono conservati per tutta la durata del rapporto contrattuale e per i successivi 12 mesi,
+salvo obblighi di legge. I dati di pagamento sono soggetti alla politica di conservazione di Stripe.</p>
+
+<h2>6. Servizi di Terze Parti</h2>
+<ul>
+  <li><strong>Supabase</strong> (database e autenticazione) — <a href="https://supabase.com/privacy">Privacy Policy</a></li>
+  <li><strong>Stripe</strong> (pagamenti) — <a href="https://stripe.com/it/privacy">Privacy Policy</a></li>
+  <li><strong>Expo / EAS</strong> (notifiche push) — <a href="https://expo.dev/privacy">Privacy Policy</a></li>
+</ul>
+
+<h2>7. Diritti dell'Utente (GDPR)</h2>
+<p>Hai il diritto di accedere, rettificare, cancellare i tuoi dati, opporti al trattamento e richiedere
+la portabilità. Per esercitare questi diritti scrivi a <a href="mailto:info@oknews24.it">info@oknews24.it</a>.
+Hai inoltre il diritto di proporre reclamo al Garante per la Protezione dei Dati Personali.</p>
+
+<h2>8. Trasferimento Dati</h2>
+<p>I dati possono essere trattati in paesi al di fuori dello Spazio Economico Europeo da parte dei
+fornitori di servizi elencati, i quali garantiscono adeguate misure di protezione (clausole contrattuali
+standard o certificazioni equivalenti).</p>
+
+<h2>9. Contatti</h2>
+<p>Per qualsiasi domanda relativa alla privacy: <a href="mailto:info@oknews24.it">info@oknews24.it</a></p>
+
+<footer>© 2026 Sindimedia s.r.l. — OKNews24</footer>
+</body></html>""")
+
+
+@app.get("/terms", response_class=HTMLResponse)
+async def terms_of_service():
+    return HTMLResponse(f"""<!DOCTYPE html><html lang="it"><head>{_HTML_STYLE}
+<title>Termini di Servizio — OKNews24</title></head><body>
+<h1>Termini di Servizio</h1>
+<p><em>Ultimo aggiornamento: 15 aprile 2026</em></p>
+
+<h2>1. Accettazione dei Termini</h2>
+<p>Utilizzando l'app OKNews24 accetti i presenti Termini di Servizio. Se non li accetti, ti chiediamo
+di non utilizzare l'App.</p>
+
+<h2>2. Descrizione del Servizio</h2>
+<p>OKNews24 è un'applicazione di lettura di notizie locali del territorio toscano (Mugello, Valdisieve,
+Firenze e zone limitrofe) sviluppata da Sindimedia s.r.l. Il servizio aggrega contenuti RSS da fonti
+editoriali di proprietà di Sindimedia.</p>
+
+<h2>3. Account Utente</h2>
+<ul>
+  <li>Per utilizzare il servizio è necessario creare un account con indirizzo e-mail valido.</li>
+  <li>Sei responsabile della riservatezza delle tue credenziali di accesso.</li>
+  <li>Ci riserviamo il diritto di sospendere account che violino i presenti termini.</li>
+</ul>
+
+<h2>4. Abbonamento e Pagamenti</h2>
+<ul>
+  <li>Il servizio prevede un piano gratuito (accesso limitato) e piani a pagamento mensile o annuale.</li>
+  <li>I pagamenti sono gestiti tramite Stripe in modalità sicura.</li>
+  <li>L'abbonamento si rinnova automaticamente salvo disdetta prima del rinnovo.</li>
+  <li>Per richiedere il rimborso scrivi a <a href="mailto:info@oknews24.it">info@oknews24.it</a> entro 14 giorni dall'acquisto.</li>
+</ul>
+
+<h2>5. Proprietà Intellettuale</h2>
+<p>I contenuti editoriali sono di proprietà delle rispettive testate. Il codice e il design dell'App
+sono di proprietà di Sindimedia s.r.l. È vietata qualsiasi riproduzione non autorizzata.</p>
+
+<h2>6. Limitazione di Responsabilità</h2>
+<p>OKNews24 aggrega contenuti di terze parti. Non garantiamo l'accuratezza o la completezza delle
+notizie pubblicate. Il servizio è fornito "così com'è" senza garanzie di continuità.</p>
+
+<h2>7. Modifiche ai Termini</h2>
+<p>Ci riserviamo il diritto di modificare i presenti termini con preavviso di 30 giorni tramite
+notifica nell'App o via e-mail.</p>
+
+<h2>8. Legge Applicabile</h2>
+<p>I presenti termini sono regolati dalla legge italiana. Per qualsiasi controversia è competente il
+Foro di Firenze.</p>
+
+<h2>9. Contatti</h2>
+<p><a href="mailto:info@oknews24.it">info@oknews24.it</a> — Sindimedia s.r.l.</p>
+
+<footer>© 2026 Sindimedia s.r.l. — OKNews24</footer>
+</body></html>""")
 
 
 @app.on_event("startup")
