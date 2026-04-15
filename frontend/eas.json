@@ -34,6 +34,11 @@
   },
   "submit": {
     "production": {
+      "ios": {
+        "appleId": "saverio_zeni@me.com",
+        "ascAppId": "6762310340",
+        "appleTeamId": "P32575G9VR"
+      },
       "android": {
         "serviceAccountKeyPath": "./google-play-service-account.json",
         "track": "internal"
