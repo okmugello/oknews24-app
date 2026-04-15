@@ -1,3 +1,8 @@
 uploads = []
 generated = []
-outputs = []
+
+[[outputs]]
+id = "QKMSMDyS9sP0A6-iRc-OL"
+uri = "file://store-assets/store-listing.md"
+type = "text"
+title = "Testi e istruzioni per App Store e Google Play"
