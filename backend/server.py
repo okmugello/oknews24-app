@@ -1443,6 +1443,166 @@ _HTML_STYLE = """
 </style>
 """
 
+_MOBILE_CSS = """
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390px">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;background:#f2f2f7;width:390px;min-height:844px;overflow-x:hidden}
+.topbar{background:#fff;padding:52px 16px 12px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;gap:10px}
+.topbar h1{font-size:22px;font-weight:700;color:#111}
+.logo{width:32px;height:32px;background:#3B82F6;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px;flex-shrink:0}
+.tabs{background:#fff;display:flex;border-bottom:1px solid #e5e7eb;overflow-x:auto}
+.tab{padding:10px 14px;font-size:13px;color:#6b7280;white-space:nowrap;border-bottom:2px solid transparent}
+.tab.active{color:#3B82F6;border-bottom-color:#3B82F6;font-weight:600}
+.card{background:#fff;margin:10px 12px 0;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.card img{width:100%;height:180px;object-fit:cover}
+.card-body{padding:12px}
+.badge{display:inline-block;background:#EFF6FF;color:#3B82F6;font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px;margin-bottom:8px}
+.card-title{font-size:16px;font-weight:700;color:#111;line-height:1.3;margin-bottom:6px}
+.card-meta{font-size:12px;color:#9ca3af}
+.card-desc{font-size:14px;color:#4b5563;margin-top:8px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.tabbar{position:fixed;bottom:0;left:0;width:390px;background:#fff;border-top:1px solid #e5e7eb;display:flex;padding:8px 0 24px}
+.tabi{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;color:#9ca3af}
+.tabi.active{color:#3B82F6}
+.tabi svg{width:22px;height:22px}
+.hero{width:100%;height:220px;object-fit:cover;display:block}
+.article-body{background:#fff;padding:16px}
+.article-title{font-size:20px;font-weight:800;color:#111;line-height:1.3;margin-bottom:10px}
+.article-meta{font-size:13px;color:#9ca3af;margin-bottom:14px}
+.article-text{font-size:15px;color:#374151;line-height:1.7}
+.profile-header{background:#fff;padding:24px 16px;text-align:center;margin-bottom:10px}
+.avatar{width:72px;height:72px;background:#3B82F6;border-radius:36px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:28px;font-weight:700;margin:0 auto 12px}
+.profile-name{font-size:20px;font-weight:700;color:#111}
+.profile-email{font-size:14px;color:#6b7280;margin-top:4px}
+.sub-badge{display:inline-flex;align-items:center;gap:6px;background:#EFF6FF;color:#3B82F6;font-size:13px;font-weight:600;padding:6px 14px;border-radius:20px;margin-top:10px}
+.menu-item{background:#fff;padding:16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #f3f4f6}
+.menu-label{font-size:15px;color:#111}
+.sub-card{background:#fff;border-radius:16px;margin:12px;padding:20px;border:2px solid #3B82F6}
+.sub-title{font-size:18px;font-weight:800;color:#111;margin-bottom:4px}
+.sub-price{font-size:32px;font-weight:800;color:#3B82F6}
+.sub-period{font-size:14px;color:#6b7280}
+.sub-features{margin-top:14px;display:flex;flex-direction:column;gap:8px}
+.sub-feature{font-size:14px;color:#374151;display:flex;align-items:center;gap:8px}
+.sub-btn{background:#3B82F6;color:#fff;width:100%;padding:14px;border-radius:12px;text-align:center;font-size:16px;font-weight:700;margin-top:16px}
+</style>
+"""
+
+async def _fetch_articles_for_screenshot(limit=5):
+    headers = {"apikey": SUPABASE_SERVICE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"}
+    async with httpx.AsyncClient(timeout=8) as c:
+        r = await c.get(f"{SUPABASE_URL}/rest/v1/articles",
+            params={"select": "title,description,image_url,feed_name,pub_date,link", "limit": limit, "order": "pub_date.desc"},
+            headers=headers)
+        return r.json() if r.status_code == 200 else []
+
+def _tabbar(active="home"):
+    def t(name, label, icon):
+        a = "active" if active == name else ""
+        icons = {
+            "home": '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9"/>',
+            "saved": '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>',
+            "profile": '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>',
+        }
+        return f'<div class="tabi {a}"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor">{icons[name]}</svg>{label}</div>'
+    return f'<div class="tabbar">{t("home","Notizie","home")}{t("saved","Salvati","saved")}{t("profile","Profilo","profile")}</div>'
+
+@app.get("/ss/home", response_class=HTMLResponse)
+async def ss_home():
+    arts = await _fetch_articles_for_screenshot(5)
+    cards = ""
+    for a in arts:
+        img = f'<img src="{a["image_url"]}" alt="" loading="lazy">' if a.get("image_url") else ""
+        desc = f'<p class="card-desc">{a.get("description","")[:120]}</p>' if a.get("description") else ""
+        cards += f'<div class="card">{img}<div class="card-body"><span class="badge">{a.get("feed_name","")}</span><p class="card-title">{a.get("title","")}</p>{desc}</div></div>'
+    return HTMLResponse(f"""<!DOCTYPE html><html lang="it"><head>{_MOBILE_CSS}<title>Home</title></head><body>
+<div class="topbar"><div class="logo">OK</div><h1>OKNews24</h1></div>
+<div class="tabs"><div class="tab active">Tutte</div><div class="tab">Mugello</div><div class="tab">Valdisieve</div><div class="tab">Firenze</div><div class="tab">Sport</div></div>
+<div style="padding-bottom:90px">{cards}</div>
+{_tabbar("home")}
+</body></html>""")
+
+@app.get("/ss/article", response_class=HTMLResponse)
+async def ss_article():
+    arts = await _fetch_articles_for_screenshot(1)
+    a = arts[0] if arts else {}
+    img = f'<img class="hero" src="{a["image_url"]}" alt="">' if a.get("image_url") else ""
+    return HTMLResponse(f"""<!DOCTYPE html><html lang="it"><head>{_MOBILE_CSS}<title>Articolo</title></head><body>
+{img}
+<div class="article-body">
+  <span class="badge">{a.get("feed_name","")}</span>
+  <h1 class="article-title">{a.get("title","")}</h1>
+  <p class="article-meta">Oggi · OKNews24</p>
+  <p class="article-text">{a.get("description","")}</p>
+  <p class="article-text" style="margin-top:12px">Le notizie del territorio toscano aggiornate in tempo reale. Leggi tutti gli articoli senza limiti con l'abbonamento OKNews24 Premium.</p>
+</div>
+{_tabbar("home")}
+</body></html>""")
+
+@app.get("/ss/saved", response_class=HTMLResponse)
+async def ss_saved():
+    arts = await _fetch_articles_for_screenshot(3)
+    cards = ""
+    for a in arts:
+        img = f'<img src="{a["image_url"]}" alt="" loading="lazy">' if a.get("image_url") else ""
+        cards += f'<div class="card">{img}<div class="card-body"><span class="badge">{a.get("feed_name","")}</span><p class="card-title">{a.get("title","")}</p></div></div>'
+    return HTMLResponse(f"""<!DOCTYPE html><html lang="it"><head>{_MOBILE_CSS}<title>Salvati</title></head><body>
+<div class="topbar"><h1>Articoli salvati</h1></div>
+<div style="padding-bottom:90px">{cards}</div>
+{_tabbar("saved")}
+</body></html>""")
+
+@app.get("/ss/profile", response_class=HTMLResponse)
+async def ss_profile():
+    return HTMLResponse(f"""<!DOCTYPE html><html lang="it"><head>{_MOBILE_CSS}<title>Profilo</title></head><body>
+<div style="padding-bottom:90px">
+<div class="profile-header">
+  <div class="avatar">S</div>
+  <div class="profile-name">Saverio Zeni</div>
+  <div class="profile-email">saverio@oknews24.it</div>
+  <div class="sub-badge">⭐ Piano Annuale attivo</div>
+</div>
+<div class="menu-item"><span class="menu-label">📰 Articoli letti</span><span style="color:#3B82F6;font-weight:600">47</span></div>
+<div class="menu-item"><span class="menu-label">🔖 Articoli salvati</span><span style="color:#3B82F6;font-weight:600">12</span></div>
+<div class="menu-item"><span class="menu-label">🔔 Notifiche push</span><span style="color:#34d399;font-weight:600">Attive</span></div>
+<div class="menu-item"><span class="menu-label">🌙 Tema scuro</span><span style="color:#6b7280">Automatico</span></div>
+<div class="menu-item"><span class="menu-label">⚙️ Preferenze feed</span><span style="color:#9ca3af">›</span></div>
+<div class="menu-item"><span class="menu-label" style="color:#ef4444">Esci</span><span></span></div>
+</div>
+{_tabbar("profile")}
+</body></html>""")
+
+@app.get("/ss/subscription", response_class=HTMLResponse)
+async def ss_subscription():
+    return HTMLResponse(f"""<!DOCTYPE html><html lang="it"><head>{_MOBILE_CSS}<title>Abbonamento</title></head><body>
+<div class="topbar"><h1>Abbonati</h1></div>
+<div style="padding:16px 0 90px">
+  <p style="text-align:center;color:#6b7280;font-size:14px;margin:8px 16px 16px">Leggi tutte le notizie senza limiti</p>
+  <div class="sub-card">
+    <div class="sub-title">Piano Annuale</div>
+    <div><span class="sub-price">€36</span><span class="sub-period">/anno · risparmi il 25%</span></div>
+    <div class="sub-features">
+      <div class="sub-feature">✅ Articoli illimitati</div>
+      <div class="sub-feature">✅ Notifiche push</div>
+      <div class="sub-feature">✅ Accesso a tutti i feed</div>
+      <div class="sub-feature">✅ Nessuna pubblicità</div>
+    </div>
+    <div class="sub-btn">Abbonati ora</div>
+  </div>
+  <div class="sub-card" style="border-color:#e5e7eb;margin-top:0">
+    <div class="sub-title">Piano Mensile</div>
+    <div><span class="sub-price" style="font-size:26px;color:#374151">€4</span><span class="sub-period">/mese</span></div>
+    <div class="sub-features">
+      <div class="sub-feature">✅ Articoli illimitati</div>
+      <div class="sub-feature">✅ Notifiche push</div>
+      <div class="sub-feature">✅ Accesso a tutti i feed</div>
+    </div>
+    <div class="sub-btn" style="background:#6b7280">Abbonati ora</div>
+  </div>
+</div>
+{_tabbar("profile")}
+</body></html>""")
+
 @app.get("/privacy-policy", response_class=HTMLResponse)
 async def privacy_policy():
     return HTMLResponse(f"""<!DOCTYPE html><html lang="it"><head>{_HTML_STYLE}
