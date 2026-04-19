@@ -29,6 +29,8 @@ STRIPE_PUBLISHABLE_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY', '')
 STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
 STRIPE_PRICES = {'monthly': None, 'yearly': None}
 
+GOOGLE_RRM_WEBHOOK_SECRET = os.environ.get('GOOGLE_RRM_WEBHOOK_SECRET', '')
+
 FREE_ARTICLES_LIMIT = 5
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -312,6 +314,51 @@ async def send_reset_email(email: str, token: str) -> bool:
             return False
         except Exception as e:
             logger.error(f"Email send failed: {e}")
+            return False
+
+
+async def send_welcome_email(email: str, temp_password: str) -> bool:
+    """Send welcome email to new users created via Google RRM."""
+    if not RESEND_API_KEY:
+        logger.warning("RESEND_API_KEY not set - cannot send welcome email")
+        return False
+    async with httpx.AsyncClient(timeout=15) as c:
+        try:
+            r = await c.post(
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
+                json={
+                    "from": "OKNews24 <no-reply@oknews24.it>",
+                    "to": email,
+                    "subject": "Benvenuto in OKNews24 — Il tuo account è pronto!",
+                    "html": f"""
+                    <div style="font-family:sans-serif;padding:24px;max-width:480px;margin:0 auto">
+                      <h2 style="color:#1e40af;margin-bottom:8px">Benvenuto in OKNews24!</h2>
+                      <p style="color:#374151">Il tuo abbonamento è stato attivato con successo tramite Google.</p>
+                      <p style="color:#374151">Puoi accedere all'app con le seguenti credenziali temporanee:</p>
+                      <div style="background:#f3f4f6;border-radius:8px;padding:16px;margin:16px 0">
+                        <p style="margin:0;color:#374151"><strong>Email:</strong> {email}</p>
+                        <p style="margin:8px 0 0;color:#374151"><strong>Password temporanea:</strong> {temp_password}</p>
+                      </div>
+                      <p style="color:#374151">Ti consigliamo di cambiare la password al primo accesso usando la funzione
+                      "Password dimenticata?" nell'app.</p>
+                      <p style="color:#374151">Scarica l'app:</p>
+                      <ul style="color:#374151">
+                        <li>iOS: cerca "OKNews24" sull'App Store</li>
+                        <li>Android: cerca "OKNews24" su Google Play</li>
+                      </ul>
+                      <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
+                      <p style="color:#9ca3af;font-size:12px">OKNews24 · Notizie locali dalla Toscana</p>
+                    </div>"""
+                }
+            )
+            if r.status_code in [200, 201]:
+                logger.info(f"Welcome email sent to {email}")
+                return True
+            logger.error(f"Resend welcome email error: {r.text}")
+            return False
+        except Exception as e:
+            logger.error(f"Welcome email send failed: {e}")
             return False
 
 
@@ -1189,6 +1236,132 @@ async def get_my_subscription(request: Request):
         "subscription_status": user.get("subscription_status", "trial"),
         "articles_read": user.get("articles_read", 0),
         "trial_remaining": max(0, FREE_ARTICLES_LIMIT - user.get("articles_read", 0)) if user.get("subscription_status") == "trial" else None
+    }
+
+
+# ============== GOOGLE RRM WEBHOOK ==============
+
+@app.post("/api/webhooks/google-rrm")
+async def google_rrm_webhook(request: Request):
+    """
+    Webhook per Google Reader Revenue Manager (RRM).
+    Riceve notifiche di pagamento, crea/aggiorna l'utente e invia email di benvenuto.
+
+    Verifica opzionale tramite header X-Webhook-Secret o query param ?secret=...
+    Configura GOOGLE_RRM_WEBHOOK_SECRET nelle variabili d'ambiente.
+
+    Payload atteso da Google RRM:
+    {
+      "publicationId": "...",
+      "email": "user@example.com",
+      "eventType": "SUBSCRIPTION_STARTED" | "SUBSCRIPTION_RENEWED" | "SUBSCRIPTION_CANCELED" | "SUBSCRIPTION_EXPIRED",
+      "subscriptionState": "ACTIVE" | "CANCELED" | "EXPIRED",
+      "productId": "monthly_plan" | "yearly_plan" | ...,
+      "purchaseToken": "...",
+      "orderId": "..."
+    }
+    """
+    import secrets as _secrets
+    import string as _string
+
+    # --- Verify webhook secret (if configured) ---
+    if GOOGLE_RRM_WEBHOOK_SECRET:
+        provided = (
+            request.headers.get("X-Webhook-Secret") or
+            request.headers.get("X-Google-Webhook-Secret") or
+            request.query_params.get("secret", "")
+        )
+        if provided != GOOGLE_RRM_WEBHOOK_SECRET:
+            logger.warning("Google RRM webhook: invalid secret")
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+    # --- Parse payload ---
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    logger.info(f"Google RRM webhook received: {payload}")
+
+    email = payload.get("email", "").strip().lower()
+    event_type = payload.get("eventType", "").upper()
+    subscription_state = payload.get("subscriptionState", "").upper()
+    product_id = payload.get("productId", "").lower()
+    purchase_token = payload.get("purchaseToken", "")
+    order_id = payload.get("orderId", "")
+
+    if not email:
+        raise HTTPException(status_code=400, detail="Missing email in payload")
+
+    # --- Determine subscription status from event ---
+    active_events = {"SUBSCRIPTION_STARTED", "SUBSCRIPTION_RENEWED", "SUBSCRIPTION_PURCHASED"}
+    expired_events = {"SUBSCRIPTION_CANCELED", "SUBSCRIPTION_EXPIRED", "SUBSCRIPTION_REVOKED"}
+
+    if event_type in active_events or subscription_state == "ACTIVE":
+        # Map product ID to our plan types
+        if "month" in product_id:
+            new_status = "monthly"
+        else:
+            new_status = "yearly"  # default to yearly for Google RRM
+    elif event_type in expired_events or subscription_state in {"CANCELED", "EXPIRED"}:
+        new_status = "expired"
+    else:
+        # Unknown event — log and acknowledge without changes
+        logger.info(f"Google RRM webhook: unhandled event '{event_type}', state '{subscription_state}' for {email}")
+        return {"received": True, "action": "ignored", "event": event_type}
+
+    # --- Find existing user by email ---
+    profiles = await DB.select("profiles", {"email": f"eq.{email}"})
+    is_new_user = False
+    temp_password = None
+
+    if not profiles:
+        # User doesn't exist — create them
+        logger.info(f"Google RRM: creating new user for {email}")
+        alphabet = _string.ascii_letters + _string.digits
+        temp_password = "".join(_secrets.choice(alphabet) for _ in range(16))
+
+        auth_result, auth_status = await Auth.admin_create_user(
+            email,
+            temp_password,
+            {"name": email.split("@")[0], "source": "google_rrm"}
+        )
+
+        if auth_status >= 400:
+            logger.error(f"Google RRM: failed to create user {email}: {auth_result}")
+            raise HTTPException(status_code=500, detail="Impossibile creare l'utente")
+
+        user_id = auth_result.get("id")
+        if not user_id:
+            raise HTTPException(status_code=500, detail="ID utente non ricevuto")
+
+        # Ensure profile exists
+        await DB.upsert("profiles", {
+            "id": user_id,
+            "email": email,
+            "name": email.split("@")[0],
+            "subscription_status": new_status,
+        })
+        is_new_user = True
+        logger.info(f"Google RRM: new user created {email} with status '{new_status}'")
+
+    else:
+        # User exists — update subscription status
+        profile = profiles[0]
+        user_id = profile["id"]
+        await DB.update("profiles", {"id": f"eq.{user_id}"}, {"subscription_status": new_status})
+        logger.info(f"Google RRM: updated user {email} subscription to '{new_status}'")
+
+    # --- Send welcome email for new users ---
+    if is_new_user and temp_password and new_status != "expired":
+        await send_welcome_email(email, temp_password)
+
+    return {
+        "received": True,
+        "email": email,
+        "action": "created" if is_new_user else "updated",
+        "subscription_status": new_status,
+        "event": event_type,
     }
 
 
