@@ -1338,6 +1338,20 @@ async def unregister_push_token(data: PushTokenRegister, request: Request):
     return {"message": "Push token rimosso"}
 
 
+@api_router.delete("/user/delete")
+async def delete_own_account(request: Request):
+    """Allows a user to permanently delete their own account and all associated data."""
+    user = await require_auth(request)
+    user_id = user["id"]
+    # Delete all user data
+    await DB.delete("saved_articles", {"user_id": f"eq.{user_id}"})
+    await DB.delete("push_tokens", {"user_id": f"eq.{user_id}"})
+    await DB.delete("profiles", {"id": f"eq.{user_id}"})
+    # Delete Supabase auth user
+    await Auth.admin_delete_user(user_id)
+    return {"message": "Account eliminato con successo"}
+
+
 @api_router.post("/notifications/send")
 async def send_push_notification(request: Request):
     await require_admin(request)

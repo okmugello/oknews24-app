@@ -166,6 +166,8 @@ export const updateUser = (userId: string, data: Partial<User>) =>
 
 export const deleteUser = (userId: string) => api.delete(`/admin/users/${userId}`);
 
+export const deleteOwnAccount = () => api.delete('/user/delete');
+
 export const adminCreateUser = (data: { email: string; name: string; password: string; subscription_plan: string }) =>
   api.post('/admin/users/create', data);
 

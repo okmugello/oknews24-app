@@ -6,7 +6,9 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
-  Switch
+  Switch,
+  Alert,
+  ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -14,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme, ThemeMode } from '../../contexts/ThemeContext';
 import { getSavedArticles } from '../../services/offlineStorage';
+import { deleteOwnAccount } from '../../services/api';
 
 const FREE_ARTICLES_LIMIT = 5;
 
@@ -22,6 +25,7 @@ export default function ProfileScreen() {
   const { user, logout } = useAuth();
   const { mode, isDark, colors, setMode, toggleTheme } = useTheme();
   const [savedCount, setSavedCount] = useState(0);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   useEffect(() => {
     loadSavedCount();
@@ -40,6 +44,30 @@ export default function ProfileScreen() {
     } catch (e) {
       // logout clears state regardless
     }
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Elimina Account',
+      'Questa azione è irreversibile. Verranno cancellati permanentemente il tuo account e tutti i tuoi dati (articoli salvati, preferenze, abbonamento).\n\nVuoi procedere?',
+      [
+        { text: 'Annulla', style: 'cancel' },
+        {
+          text: 'Elimina',
+          style: 'destructive',
+          onPress: async () => {
+            setIsDeletingAccount(true);
+            try {
+              await deleteOwnAccount();
+              await logout();
+            } catch (e) {
+              setIsDeletingAccount(false);
+              Alert.alert('Errore', 'Impossibile eliminare l\'account. Riprova più tardi.');
+            }
+          }
+        }
+      ]
+    );
   };
 
   const handleThemeChange = () => {
@@ -245,6 +273,22 @@ export default function ProfileScreen() {
           </View>
         )}
 
+        {/* Delete Account */}
+        <TouchableOpacity
+          style={styles.deleteAccountButton}
+          onPress={handleDeleteAccount}
+          disabled={isDeletingAccount}
+        >
+          {isDeletingAccount ? (
+            <ActivityIndicator size="small" color="#EF4444" />
+          ) : (
+            <Ionicons name="trash-outline" size={22} color="#EF4444" />
+          )}
+          <Text style={styles.deleteAccountText}>
+            {isDeletingAccount ? 'Eliminazione in corso...' : 'Elimina Account'}
+          </Text>
+        </TouchableOpacity>
+
         {/* Logout */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Ionicons name="log-out-outline" size={24} color="#EF4444" />
@@ -444,11 +488,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center'
   },
+  deleteAccountButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    marginHorizontal: 16,
+    padding: 14,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FECACA'
+  },
+  deleteAccountText: {
+    color: '#EF4444',
+    fontSize: 15,
+    fontWeight: '500',
+    marginLeft: 8
+  },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 32,
+    marginTop: 10,
     marginHorizontal: 16,
     padding: 16,
     backgroundColor: '#FEE2E2',
