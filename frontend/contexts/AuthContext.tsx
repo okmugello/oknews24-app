@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
 import api from '../services/api';
+import { getDeviceId, getDeviceName } from '../utils/deviceId';
 
 interface User {
   user_id: string;
@@ -124,7 +125,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [checkAuth]);
 
   const login = async (email: string, password: string) => {
-    const response = await api.post('/auth/login', { email, password });
+    const device_id = await getDeviceId();
+    const device_name = getDeviceName();
+    const response = await api.post('/auth/login', { email, password, device_id, device_name });
     const userData = response.data;
     const token = userData.session_token || userData.access_token || '';
 

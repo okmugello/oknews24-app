@@ -16,7 +16,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme, ThemeMode } from '../../contexts/ThemeContext';
 import { getSavedArticles } from '../../services/offlineStorage';
-import { deleteOwnAccount } from '../../services/api';
+import { deleteOwnAccount, getDevices, removeDevice, DeviceSession } from '../../services/api';
+import { getDeviceId } from '../../utils/deviceId';
 
 const FREE_ARTICLES_LIMIT = 5;
 
@@ -26,9 +27,15 @@ export default function ProfileScreen() {
   const { mode, isDark, colors, setMode, toggleTheme } = useTheme();
   const [savedCount, setSavedCount] = useState(0);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [devices, setDevices] = useState<DeviceSession[]>([]);
+  const [currentDeviceId, setCurrentDeviceId] = useState<string>('');
+  const [devicesLoading, setDevicesLoading] = useState(false);
+  const [removingDeviceId, setRemovingDeviceId] = useState<string | null>(null);
 
   useEffect(() => {
     loadSavedCount();
+    loadDevices();
+    getDeviceId().then(setCurrentDeviceId);
   }, []);
 
   const loadSavedCount = async () => {
@@ -36,6 +43,52 @@ export default function ProfileScreen() {
       const saved = await getSavedArticles();
       setSavedCount(saved.length);
     } catch {}
+  };
+
+  const loadDevices = async () => {
+    setDevicesLoading(true);
+    try {
+      const res = await getDevices();
+      setDevices(res.data.devices || []);
+    } catch {
+      setDevices([]);
+    } finally {
+      setDevicesLoading(false);
+    }
+  };
+
+  const handleRemoveDevice = (deviceId: string, deviceName: string) => {
+    Alert.alert(
+      'Disconnetti dispositivo',
+      `Vuoi disconnettere "${deviceName}"?`,
+      [
+        { text: 'Annulla', style: 'cancel' },
+        {
+          text: 'Disconnetti',
+          style: 'destructive',
+          onPress: async () => {
+            setRemovingDeviceId(deviceId);
+            try {
+              await removeDevice(deviceId);
+              setDevices(prev => prev.filter(d => d.device_id !== deviceId));
+            } catch {
+              Alert.alert('Errore', 'Impossibile disconnettere il dispositivo');
+            } finally {
+              setRemovingDeviceId(null);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const formatLastSeen = (dateStr: string) => {
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '';
+    }
   };
 
   const handleLogout = async () => {
@@ -263,6 +316,48 @@ export default function ProfileScreen() {
               <Text style={styles.menuItemText}>Statistiche</Text>
               <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
             </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Dispositivi connessi */}
+        {devices.length > 0 && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Dispositivi connessi</Text>
+            {devicesLoading ? (
+              <ActivityIndicator size="small" color="#3B82F6" style={{ marginVertical: 8 }} />
+            ) : (
+              devices.map((d) => {
+                const isCurrent = d.device_id === currentDeviceId;
+                return (
+                  <View key={d.device_id} style={[styles.deviceRow, { backgroundColor: isDark ? '#1F2937' : '#FFFFFF' }]}>
+                    <Ionicons
+                      name="phone-portrait-outline"
+                      size={22}
+                      color={isCurrent ? '#3B82F6' : '#6B7280'}
+                      style={{ marginRight: 12 }}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.deviceName, { color: colors.text }]}>
+                        {d.device_name || 'Dispositivo'}
+                        {isCurrent ? ' (questo)' : ''}
+                      </Text>
+                      <Text style={styles.deviceLastSeen}>
+                        Ultimo accesso: {formatLastSeen(d.last_seen)}
+                      </Text>
+                    </View>
+                    {!isCurrent && (
+                      removingDeviceId === d.device_id ? (
+                        <ActivityIndicator size="small" color="#EF4444" />
+                      ) : (
+                        <TouchableOpacity onPress={() => handleRemoveDevice(d.device_id, d.device_name || 'Dispositivo')}>
+                          <Ionicons name="close-circle-outline" size={22} color="#EF4444" />
+                        </TouchableOpacity>
+                      )
+                    )}
+                  </View>
+                );
+              })
+            )}
           </View>
         )}
 
@@ -519,5 +614,26 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '600'
+  },
+  deviceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1
+  },
+  deviceName: {
+    fontSize: 14,
+    fontWeight: '600'
+  },
+  deviceLastSeen: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 2
   }
 });

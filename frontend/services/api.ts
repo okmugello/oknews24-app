@@ -168,6 +168,18 @@ export const deleteUser = (userId: string) => api.delete(`/admin/users/${userId}
 
 export const deleteOwnAccount = () => api.delete('/user/delete');
 
+export const getDevices = () => api.get<{ devices: DeviceSession[]; max_devices: number }>('/auth/devices');
+export const removeDevice = (deviceId: string) => api.delete(`/auth/devices/${deviceId}`);
+
+export interface DeviceSession {
+  id: string;
+  user_id: string;
+  device_id: string;
+  device_name: string;
+  last_seen: string;
+  created_at: string;
+}
+
 export const adminCreateUser = (data: { email: string; name: string; password: string; subscription_plan: string }) =>
   api.post('/admin/users/create', data);
 

@@ -32,6 +32,7 @@ STRIPE_PRICES = {'monthly': None, 'yearly': None}
 GOOGLE_RRM_WEBHOOK_SECRET = os.environ.get('GOOGLE_RRM_WEBHOOK_SECRET', '')
 
 FREE_ARTICLES_LIMIT = 5
+MAX_DEVICE_SESSIONS = 2  # Numero massimo di dispositivi per account
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -233,6 +234,8 @@ class UserCreate(BaseModel):
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+    device_id: Optional[str] = None
+    device_name: Optional[str] = None
 
 class UserUpdate(BaseModel):
     name: Optional[str] = None
@@ -470,12 +473,72 @@ async def login(user_data: UserLogin, response: Response):
 
     profiles = await DB.select("profiles", {"id": f"eq.{user_id}"})
     if not profiles:
-        # Create profile if missing
         email = auth_result.get("user", {}).get("email", "")
         await DB.upsert("profiles", {"id": user_id, "email": email, "name": email.split("@")[0]})
         profiles = await DB.select("profiles", {"id": f"eq.{user_id}"})
 
+    # ---- Device session check ----
+    device_id = user_data.device_id
+    device_name = user_data.device_name or "Dispositivo sconosciuto"
+    if device_id:
+        try:
+            existing_sessions = await DB.select("device_sessions", {"user_id": f"eq.{user_id}"})
+            device_ids = [s["device_id"] for s in existing_sessions]
+            if device_id not in device_ids:
+                if len(existing_sessions) >= MAX_DEVICE_SESSIONS:
+                    raise HTTPException(
+                        status_code=403,
+                        detail=(
+                            f"Limite dispositivi raggiunto. Disconnetti un altro dispositivo "
+                            f"dal tuo profilo sul sito per continuare."
+                        )
+                    )
+                # Register new device
+                now = datetime.now(timezone.utc).isoformat()
+                await DB.upsert("device_sessions", {
+                    "user_id": user_id,
+                    "device_id": device_id,
+                    "device_name": device_name,
+                    "last_seen": now,
+                })
+            else:
+                # Update last_seen for existing device
+                now = datetime.now(timezone.utc).isoformat()
+                await DB.update(
+                    "device_sessions",
+                    {"user_id": f"eq.{user_id}", "device_id": f"eq.{device_id}"},
+                    {"last_seen": now, "device_name": device_name}
+                )
+        except HTTPException:
+            raise
+        except Exception as e:
+            # Table may not exist yet — log and continue
+            logger.warning(f"Device session check skipped (run migration): {e}")
+
     return _format_user(profiles[0], token)
+
+
+@api_router.get("/auth/devices")
+async def list_devices(request: Request):
+    """Return all registered devices for the current user."""
+    user = await require_auth(request)
+    sessions = await DB.select(
+        "device_sessions",
+        {"user_id": f"eq.{user['id']}"},
+        order="last_seen.desc"
+    )
+    return {"devices": sessions, "max_devices": MAX_DEVICE_SESSIONS}
+
+
+@api_router.delete("/auth/devices/{device_id}")
+async def remove_device(device_id: str, request: Request):
+    """Remove a registered device session for the current user."""
+    user = await require_auth(request)
+    await DB.delete("device_sessions", {
+        "user_id": f"eq.{user['id']}",
+        "device_id": f"eq.{device_id}"
+    })
+    return {"message": "Dispositivo rimosso"}
 
 
 @api_router.post("/auth/google")
