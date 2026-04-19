@@ -164,20 +164,13 @@ export default function ProfileScreen() {
                 {getSubscriptionText()}
               </Text>
             </View>
-            {user?.subscription_status === 'trial' || user?.subscription_status === 'expired' ? (
-              <TouchableOpacity
-                style={styles.subscribeButton}
-                onPress={() => router.push('/subscription')}
-              >
-                <Text style={styles.subscribeButtonText}>Abbonati ora</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={styles.manageButton}
-                onPress={() => router.push('/subscription')}
-              >
-                <Text style={styles.manageButtonText}>Gestisci abbonamento</Text>
-              </TouchableOpacity>
+            {(user?.subscription_status === 'trial' || user?.subscription_status === 'expired') && (
+              <View style={styles.subscriptionInfoBox}>
+                <Ionicons name="globe-outline" size={16} color="#3B82F6" />
+                <Text style={styles.subscriptionInfoText}>
+                  Visita oknews24.it per attivare l'abbonamento
+                </Text>
+              </View>
             )}
           </View>
         </View>
@@ -408,27 +401,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 8
   },
-  subscribeButton: {
-    backgroundColor: '#3B82F6',
-    paddingVertical: 12,
+  subscriptionInfoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     borderRadius: 8,
-    alignItems: 'center'
+    gap: 8
   },
-  subscribeButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600'
-  },
-  manageButton: {
-    backgroundColor: '#F3F4F6',
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center'
-  },
-  manageButtonText: {
-    color: '#4B5563',
-    fontSize: 16,
-    fontWeight: '600'
+  subscriptionInfoText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#3B82F6',
+    lineHeight: 18
   },
   statsCard: {
     backgroundColor: '#FFFFFF',

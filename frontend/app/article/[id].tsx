@@ -386,15 +386,18 @@ export default function ArticleDetail() {
           <Ionicons name="lock-closed" size={48} color="#F59E0B" />
           <Text style={[styles.errorTitle, { color: colors.text }]}>Accesso limitato</Text>
           <Text style={[styles.errorText, { color: colors.textSecondary }]}>{error}</Text>
-          {user?.subscription_status === 'trial' || user?.subscription_status === 'expired' ? (
-            <TouchableOpacity style={styles.subscribeButton} onPress={() => router.push('/subscription')}>
-              <Text style={styles.subscribeButtonText}>Abbonati ora</Text>
-            </TouchableOpacity>
-          ) : !user ? (
+          {!user ? (
             <TouchableOpacity style={styles.subscribeButton} onPress={() => router.replace('/(auth)/login')}>
               <Text style={styles.subscribeButtonText}>Accedi</Text>
             </TouchableOpacity>
-          ) : null}
+          ) : (
+            <View style={styles.websiteInfoBox}>
+              <Ionicons name="globe-outline" size={18} color="#3B82F6" />
+              <Text style={styles.websiteInfoText}>
+                Visita oknews24.it per attivare l'abbonamento e accedere a tutti gli articoli
+              </Text>
+            </View>
+          )}
         </View>
       </SafeAreaView>
     );
@@ -563,6 +566,8 @@ const styles = StyleSheet.create({
   errorText: { fontSize: 16, textAlign: 'center', marginBottom: 24 },
   subscribeButton: { backgroundColor: '#3B82F6', paddingHorizontal: 32, paddingVertical: 14, borderRadius: 12 },
   subscribeButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
+  websiteInfoBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', padding: 14, borderRadius: 12, gap: 10, marginTop: 4 },
+  websiteInfoText: { flex: 1, fontSize: 14, color: '#3B82F6', lineHeight: 20 },
   embedContainer: { marginVertical: 12, borderRadius: 12, padding: 12, overflow: 'hidden' },
   embedLabel: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   embedLabelText: { fontSize: 13, fontWeight: '500', marginLeft: 6 },

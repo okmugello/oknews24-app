@@ -1,45 +1,38 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
 
 const FREE_ARTICLES_LIMIT = 5;
 
 export default function SubscriptionBanner() {
   const { user } = useAuth();
-  const router = useRouter();
 
   if (!user || user.subscription_status !== 'trial') {
     return null;
   }
 
-  const remaining = FREE_ARTICLES_LIMIT - user.articles_read;
+  const remaining = Math.max(0, FREE_ARTICLES_LIMIT - user.articles_read);
   const isLow = remaining <= 2;
 
   return (
-    <TouchableOpacity
-      style={[styles.banner, isLow && styles.bannerWarning]}
-      onPress={() => router.push('/subscription')}
-      activeOpacity={0.8}
-    >
+    <View style={[styles.banner, isLow && styles.bannerWarning]}>
       <View style={styles.iconContainer}>
         <Ionicons
           name={isLow ? 'warning' : 'newspaper'}
-          size={24}
+          size={22}
           color={isLow ? '#F59E0B' : '#3B82F6'}
         />
       </View>
       <View style={styles.textContainer}>
         <Text style={[styles.title, isLow && styles.titleWarning]}>
-          {remaining > 0 ? `${remaining} articoli gratuiti rimanenti` : 'Prova terminata'}
+          {remaining > 0 ? `${remaining} articoli gratuiti rimanenti` : 'Prova gratuita terminata'}
         </Text>
         <Text style={styles.subtitle}>
-          Abbonati per accesso illimitato
+          Visita oknews24.it per attivare l'abbonamento
         </Text>
       </View>
-      <Ionicons name="chevron-forward" size={20} color="#6B7280" />
-    </TouchableOpacity>
+    </View>
   );
 }
 

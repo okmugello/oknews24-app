@@ -1,135 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
-  Linking,
-  Platform
+  Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
-import { getPlans, createCheckoutSession, verifyCheckoutSession, cancelSubscription, Plan } from '../services/api';
-import LoadingSpinner from '../components/LoadingSpinner';
+import { cancelSubscription } from '../services/api';
 
 export default function SubscriptionScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams();
   const { user, refreshUser } = useAuth();
-  const [plans, setPlans] = useState<Plan[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
-  const [verificationMessage, setVerificationMessage] = useState<string | null>(null);
-  const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadPlans();
-    
-    // Check for success/cancel from Stripe redirect
-    if (params.success === 'true' && params.session_id) {
-      verifyPayment(params.session_id as string);
-    } else if (params.canceled === 'true') {
-      setVerificationMessage('Pagamento annullato. Puoi riprovare quando vuoi.');
-    }
-  }, [params]);
-
-  const loadPlans = async () => {
-    try {
-      const response = await getPlans();
-      setPlans(response.data.plans);
-    } catch (error) {
-      console.error('Error loading plans:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const verifyPayment = async (sessionId: string) => {
-    setIsProcessing(true);
-    try {
-      const response = await verifyCheckoutSession(sessionId);
-      if (response.data.success) {
-        await refreshUser();
-        setVerificationMessage('Pagamento completato con successo! Il tuo abbonamento è ora attivo.');
-      } else {
-        setVerificationMessage('Verifica del pagamento in corso. Ricarica tra qualche secondo.');
-      }
-    } catch (error) {
-      console.error('Error verifying payment:', error);
-      setVerificationMessage('Errore nella verifica del pagamento. Contatta il supporto se il problema persiste.');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleSubscribe = async (planId: string) => {
-    setSelectedPlan(planId);
-    setIsProcessing(true);
-
-    try {
-      // On mobile, use oknews24.it as redirect (we'll verify manually)
-      // On web, use current origin for proper redirect
-      let successUrl: string | undefined;
-      let cancelUrl: string | undefined;
-      if (Platform.OS !== 'web') {
-        successUrl = 'https://oknews24.it/subscription?success=true&session_id={CHECKOUT_SESSION_ID}';
-        cancelUrl = 'https://oknews24.it/subscription?canceled=true';
-      }
-
-      const response = await createCheckoutSession(planId, successUrl, cancelUrl);
-      const checkoutUrl = response.data.checkout_url;
-      const sessionId = response.data.session_id;
-      
-      if (checkoutUrl) {
-        if (Platform.OS === 'web') {
-          window.location.href = checkoutUrl;
-        } else {
-          const canOpen = await Linking.canOpenURL(checkoutUrl);
-          if (canOpen) {
-            await Linking.openURL(checkoutUrl);
-            // Store session_id so user can verify manually after returning
-            setPendingSessionId(sessionId);
-            setVerificationMessage('Completa il pagamento nel browser, poi torna qui e premi "Verifica pagamento".');
-          } else {
-            Alert.alert('Errore', 'Impossibile aprire la pagina di pagamento');
-          }
-        }
-      }
-    } catch (error: any) {
-      console.error('Error creating checkout session:', error);
-      Alert.alert(
-        'Errore',
-        error.response?.data?.detail || 'Impossibile avviare il pagamento. Riprova.'
-      );
-    } finally {
-      setIsProcessing(false);
-      setSelectedPlan(null);
-    }
-  };
-
-  const handleVerifyManual = async () => {
-    if (!pendingSessionId) return;
-    setIsProcessing(true);
-    try {
-      const response = await verifyCheckoutSession(pendingSessionId);
-      if (response.data.success) {
-        await refreshUser();
-        setPendingSessionId(null);
-        setVerificationMessage('Pagamento completato con successo! Il tuo abbonamento è ora attivo.');
-      } else {
-        setVerificationMessage('Pagamento non ancora confermato. Completa il pagamento nel browser e riprova.');
-      }
-    } catch (error) {
-      setVerificationMessage('Errore nella verifica. Riprova tra qualche secondo.');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
+  const isSubscribed = user?.subscription_status === 'monthly' || user?.subscription_status === 'yearly';
 
   const handleCancelSubscription = async () => {
     Alert.alert(
@@ -146,7 +34,7 @@ export default function SubscriptionScreen() {
               await refreshUser();
               Alert.alert('Abbonamento annullato', 'Il tuo abbonamento non verrà rinnovato alla scadenza.');
             } catch (error) {
-              Alert.alert('Errore', 'Impossibile annullare l\'abbonamento');
+              Alert.alert('Errore', 'Impossibile annullare l\'abbonamento. Riprova più tardi.');
             }
           }
         }
@@ -154,72 +42,25 @@ export default function SubscriptionScreen() {
     );
   };
 
-  if (isLoading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <LoadingSpinner fullScreen message="Caricamento piani..." />
-      </SafeAreaView>
-    );
-  }
-
-  const isSubscribed = user?.subscription_status === 'monthly' || user?.subscription_status === 'yearly';
-
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
           <Ionicons name="close" size={24} color="#1F2937" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Abbonamento</Text>
+        <Text style={styles.headerTitle}>Il tuo abbonamento</Text>
         <View style={{ width: 44 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Verification Message */}
-        {verificationMessage && (
-          <View style={[
-            styles.messageCard,
-            params.success === 'true' || verificationMessage.includes('successo') ? styles.successCard : styles.warningCard
-          ]}>
-            <Ionicons 
-              name={params.success === 'true' || verificationMessage.includes('successo') ? 'checkmark-circle' : 'information-circle'} 
-              size={24} 
-              color={params.success === 'true' || verificationMessage.includes('successo') ? '#10B981' : '#F59E0B'} 
-            />
-            <Text style={styles.messageText}>{verificationMessage}</Text>
-          </View>
-        )}
-
-        {/* Manual verification button for mobile */}
-        {pendingSessionId && Platform.OS !== 'web' && (
-          <TouchableOpacity
-            style={styles.verifyButton}
-            onPress={handleVerifyManual}
-            disabled={isProcessing}
-          >
-            {isProcessing ? (
-              <LoadingSpinner />
-            ) : (
-              <>
-                <Ionicons name="checkmark-circle-outline" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-                <Text style={styles.verifyButtonText}>Verifica pagamento</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        )}
-
-        {/* Hero Section */}
+        {/* Logo */}
         <View style={styles.hero}>
           <View style={styles.logoCircle}>
             <Text style={styles.logoText}>OK</Text>
           </View>
-          <Text style={styles.heroTitle}>
-            {isSubscribed ? 'Il tuo abbonamento' : 'Sblocca OKNews24'}
-          </Text>
+          <Text style={styles.heroTitle}>OKNews24</Text>
           <Text style={styles.heroSubtitle}>
-            {isSubscribed 
-              ? 'Grazie per il tuo supporto!' 
-              : 'Accesso illimitato a tutte le notizie locali della Toscana'}
+            Notizie locali dalla Toscana
           </Text>
         </View>
 
@@ -239,7 +80,7 @@ export default function SubscriptionScreen() {
               isSubscribed ? styles.statusTextActive : styles.statusTextTrial
             ]}>
               {user.subscription_status === 'trial'
-                ? `Prova gratuita: ${5 - user.articles_read} articoli rimanenti`
+                ? `Prova gratuita: ${Math.max(0, 5 - user.articles_read)} articoli rimanenti`
                 : user.subscription_status === 'expired'
                 ? 'Abbonamento scaduto'
                 : `Abbonamento ${user.subscription_status === 'monthly' ? 'mensile' : 'annuale'} attivo`}
@@ -247,72 +88,22 @@ export default function SubscriptionScreen() {
           </View>
         )}
 
-        {/* Plans - Show only if not subscribed */}
+        {/* Info message for non-subscribed users */}
         {!isSubscribed && (
-          <View style={styles.plansContainer}>
-            {plans.map((plan) => (
-              <TouchableOpacity
-                key={plan.plan_id}
-                style={[
-                  styles.planCard,
-                  plan.plan_id === 'yearly' && styles.planCardHighlighted
-                ]}
-                onPress={() => handleSubscribe(plan.plan_id)}
-                disabled={isProcessing}
-              >
-                {plan.plan_id === 'yearly' && (
-                  <View style={styles.bestValueBadge}>
-                    <Text style={styles.bestValueText}>RISPARMIA €12</Text>
-                  </View>
-                )}
-                <Text style={styles.planName}>{plan.name}</Text>
-                <View style={styles.priceContainer}>
-                  <Text style={styles.currency}>€</Text>
-                  <Text style={styles.price}>
-                    {plan.plan_id === 'yearly' ? '3' : plan.price.toFixed(0)}
-                  </Text>
-                  <Text style={styles.period}>/mese</Text>
-                </View>
-                {plan.plan_id === 'yearly' && (
-                  <Text style={styles.yearlyPrice}>Fatturazione annuale: €36/anno</Text>
-                )}
-                <Text style={styles.planDescription}>{plan.description}</Text>
-                <View style={[
-                  styles.subscribeButton,
-                  plan.plan_id === 'yearly' && styles.subscribeButtonHighlighted
-                ]}>
-                  {isProcessing && selectedPlan === plan.plan_id ? (
-                    <LoadingSpinner />
-                  ) : (
-                    <>
-                      <Ionicons 
-                        name="card" 
-                        size={20} 
-                        color={plan.plan_id === 'yearly' ? '#FFFFFF' : '#4B5563'} 
-                        style={{ marginRight: 8 }}
-                      />
-                      <Text style={[
-                        styles.subscribeButtonText,
-                        plan.plan_id === 'yearly' && styles.subscribeButtonTextHighlighted
-                      ]}>
-                        Paga con Stripe
-                      </Text>
-                    </>
-                  )}
-                </View>
-              </TouchableOpacity>
-            ))}
+          <View style={styles.infoCard}>
+            <Ionicons name="information-circle-outline" size={28} color="#3B82F6" style={styles.infoIcon} />
+            <Text style={styles.infoTitle}>Come attivare l'abbonamento</Text>
+            <Text style={styles.infoText}>
+              Per attivare o gestire il tuo abbonamento, visita il nostro sito web:
+            </Text>
+            <View style={styles.websiteTag}>
+              <Ionicons name="globe-outline" size={16} color="#3B82F6" />
+              <Text style={styles.websiteText}>oknews24.it</Text>
+            </View>
+            <Text style={styles.infoNote}>
+              Dopo aver attivato l'abbonamento sul sito, riavvia l'app o accedi nuovamente per aggiornare il tuo stato.
+            </Text>
           </View>
-        )}
-
-        {/* Cancel button for subscribed users */}
-        {isSubscribed && (
-          <TouchableOpacity 
-            style={styles.cancelButton}
-            onPress={handleCancelSubscription}
-          >
-            <Text style={styles.cancelButtonText}>Annulla abbonamento</Text>
-          </TouchableOpacity>
         )}
 
         {/* Features */}
@@ -335,16 +126,20 @@ export default function SubscriptionScreen() {
             <Text style={styles.featureText}>Nessuna pubblicità</Text>
           </View>
           <View style={styles.featureItem}>
-            <Ionicons name="shield-checkmark" size={20} color="#3B82F6" />
-            <Text style={styles.featureText}>Pagamenti sicuri con Stripe</Text>
+            <Ionicons name="notifications" size={20} color="#3B82F6" />
+            <Text style={styles.featureText}>Notifiche push per le ultime notizie</Text>
           </View>
         </View>
 
-        {/* Stripe Badge */}
-        <View style={styles.stripeBadge}>
-          <Ionicons name="lock-closed" size={16} color="#6B7280" />
-          <Text style={styles.stripeBadgeText}>Pagamenti sicuri gestiti da Stripe</Text>
-        </View>
+        {/* Cancel button for subscribed users */}
+        {isSubscribed && (
+          <TouchableOpacity
+            style={styles.cancelButton}
+            onPress={handleCancelSubscription}
+          >
+            <Text style={styles.cancelButtonText}>Annulla abbonamento</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -377,31 +172,8 @@ const styles = StyleSheet.create({
     color: '#1F2937'
   },
   scrollContent: {
-    padding: 20
-  },
-  messageCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 24
-  },
-  successCard: {
-    backgroundColor: '#ECFDF5',
-    borderWidth: 1,
-    borderColor: '#A7F3D0'
-  },
-  warningCard: {
-    backgroundColor: '#FFFBEB',
-    borderWidth: 1,
-    borderColor: '#FDE68A'
-  },
-  messageText: {
-    flex: 1,
-    marginLeft: 12,
-    fontSize: 14,
-    color: '#1F2937',
-    lineHeight: 20
+    padding: 20,
+    paddingBottom: 40
   },
   hero: {
     alignItems: 'center',
@@ -414,7 +186,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#3B82F6',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16
+    marginBottom: 12
   },
   logoText: {
     fontSize: 22,
@@ -422,13 +194,13 @@ const styles = StyleSheet.create({
     color: '#FFFFFF'
   },
   heroTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700',
     color: '#1F2937',
-    marginBottom: 8
+    marginBottom: 4
   },
   heroSubtitle: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#6B7280',
     textAlign: 'center'
   },
@@ -437,7 +209,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderRadius: 12,
-    marginBottom: 24
+    marginBottom: 20
   },
   statusCardTrial: {
     backgroundColor: '#FFFBEB',
@@ -460,115 +232,52 @@ const styles = StyleSheet.create({
   statusTextActive: {
     color: '#065F46'
   },
-  plansContainer: {
-    marginBottom: 24
-  },
-  planCard: {
+  infoCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 20,
-    marginBottom: 16,
-    borderWidth: 2,
-    borderColor: '#E5E7EB'
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    alignItems: 'center'
   },
-  planCardHighlighted: {
-    borderColor: '#3B82F6',
-    backgroundColor: '#EFF6FF'
+  infoIcon: {
+    marginBottom: 10
   },
-  bestValueBadge: {
-    position: 'absolute',
-    top: -12,
-    right: 16,
-    backgroundColor: '#10B981',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12
-  },
-  bestValueText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700'
-  },
-  planName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 8
-  },
-  priceContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    marginBottom: 4
-  },
-  currency: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937'
-  },
-  price: {
-    fontSize: 40,
+  infoTitle: {
+    fontSize: 17,
     fontWeight: '700',
-    color: '#1F2937'
+    color: '#1F2937',
+    marginBottom: 10,
+    textAlign: 'center'
   },
-  period: {
-    fontSize: 16,
-    color: '#6B7280',
-    marginBottom: 8
-  },
-  yearlyPrice: {
-    fontSize: 13,
-    color: '#6B7280',
-    marginBottom: 8
-  },
-  planDescription: {
+  infoText: {
     fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 16
+    color: '#4B5563',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 14
   },
-  subscribeButton: {
+  websiteTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F3F4F6',
-    paddingVertical: 14,
-    borderRadius: 12
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+    marginBottom: 14
   },
-  subscribeButtonHighlighted: {
-    backgroundColor: '#3B82F6'
+  websiteText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#3B82F6'
   },
-  subscribeButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#4B5563'
-  },
-  subscribeButtonTextHighlighted: {
-    color: '#FFFFFF'
-  },
-  verifyButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#10B981',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 16
-  },
-  verifyButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600'
-  },
-  cancelButton: {
-    backgroundColor: '#FEE2E2',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 24
-  },
-  cancelButtonText: {
-    color: '#DC2626',
-    fontSize: 16,
-    fontWeight: '600'
+  infoNote: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    lineHeight: 18
   },
   features: {
     backgroundColor: '#FFFFFF',
@@ -592,15 +301,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#4B5563'
   },
-  stripeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12
+  cancelButton: {
+    backgroundColor: '#FEE2E2',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center'
   },
-  stripeBadgeText: {
-    marginLeft: 8,
-    fontSize: 12,
-    color: '#6B7280'
+  cancelButtonText: {
+    color: '#DC2626',
+    fontSize: 16,
+    fontWeight: '600'
   }
 });
