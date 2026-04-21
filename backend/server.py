@@ -1452,6 +1452,176 @@ async def get_all_users(
     return {"users": users, "total": total, "limit": limit, "skip": skip}
 
 
+@api_router.get("/admin/users/expiring")
+async def admin_expiring_users(request: Request, days: int = 30):
+    await require_admin(request)
+    profiles = await DB.select("profiles", order="subscription_end_date.asc", limit=500)
+    now = datetime.now(timezone.utc)
+    cutoff = now + timedelta(days=days)
+    result = []
+    for p in profiles:
+        end = p.get("subscription_end_date")
+        if not end:
+            continue
+        try:
+            end_dt = datetime.fromisoformat(end.replace("Z", "+00:00"))
+            if now < end_dt <= cutoff:
+                result.append(p)
+        except Exception:
+            pass
+    return {"users": result, "total": len(result)}
+
+
+@api_router.get("/admin/users/{user_id}")
+async def admin_get_user_detail(user_id: str, request: Request):
+    await require_admin(request)
+    profiles = await DB.select("profiles", {"id": f"eq.{user_id}"})
+    if not profiles:
+        raise HTTPException(404, "Utente non trovato")
+    profile = profiles[0]
+    try:
+        subs = await DB.select("subscriptions", {"user_id": f"eq.{user_id}"}, order="created_at.desc")
+        profile["subscription_history"] = subs
+    except Exception:
+        profile["subscription_history"] = []
+    return profile
+
+
+class AlertRequest(BaseModel):
+    message: Optional[str] = None
+
+@api_router.post("/admin/users/{user_id}/send-alert")
+async def admin_send_expiry_alert(user_id: str, data: AlertRequest, request: Request):
+    import os as _os
+    await require_admin(request)
+    profiles = await DB.select("profiles", {"id": f"eq.{user_id}"})
+    if not profiles:
+        raise HTTPException(404, "Utente non trovato")
+    profile = profiles[0]
+    resend_key = _os.environ.get("RESEND_API_KEY", "")
+    if not resend_key:
+        raise HTTPException(503, "Email non configurata (RESEND_API_KEY mancante)")
+    msg = data.message
+    if not msg:
+        try:
+            settings = await DB.select("admin_settings", {"key": "eq.alert_template"})
+            msg = settings[0]["value"] if settings else None
+        except Exception:
+            pass
+    if not msg:
+        msg = "Il tuo abbonamento OKNews24 è in scadenza. Rinnova ora per continuare a leggere le notizie."
+    name = profile.get("name", "Utente")
+    end_date = profile.get("subscription_end_date", "breve")
+    msg_html = msg.replace("{name}", name).replace("{expiry_date}", str(end_date)[:10])
+    import httpx as _httpx
+    async with _httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
+            json={
+                "from": "OKNews24 <noreply@oknews24.it>",
+                "to": [profile["email"]],
+                "subject": "Il tuo abbonamento OKNews24 è in scadenza",
+                "html": f"<p>{msg_html}</p>"
+            }
+        )
+    if resp.status_code >= 400:
+        raise HTTPException(502, f"Errore invio email: {resp.text}")
+    return {"message": f"Email inviata a {profile['email']}"}
+
+
+# ============== ADMIN NOTES ==============
+
+@api_router.get("/admin/notes")
+async def admin_list_notes(request: Request):
+    await require_admin(request)
+    notes = await DB.select("app_notes", order="created_at.desc")
+    return notes
+
+@api_router.post("/admin/notes")
+async def admin_create_note(data: dict, request: Request):
+    await require_admin(request)
+    note = await DB.insert("app_notes", {
+        "title": data.get("title", ""),
+        "content": data.get("content", ""),
+        "is_active": data.get("is_active", True),
+    })
+    return note
+
+@api_router.put("/admin/notes/{note_id}")
+async def admin_update_note(note_id: str, data: dict, request: Request):
+    await require_admin(request)
+    result = await DB.update("app_notes", {"id": f"eq.{note_id}"}, data)
+    return result[0] if result else {}
+
+@api_router.delete("/admin/notes/{note_id}")
+async def admin_delete_note(note_id: str, request: Request):
+    await require_admin(request)
+    await DB.delete("app_notes", {"id": f"eq.{note_id}"})
+    return {"message": "Nota eliminata"}
+
+
+# ============== ADMIN SETTINGS ==============
+
+@api_router.get("/admin/settings")
+async def admin_get_settings(request: Request):
+    await require_admin(request)
+    try:
+        rows = await DB.select("admin_settings")
+        return {r["key"]: r["value"] for r in rows}
+    except Exception:
+        return {}
+
+@api_router.put("/admin/settings/{key}")
+async def admin_update_setting(key: str, data: dict, request: Request):
+    await require_admin(request)
+    await DB.upsert("admin_settings", {"key": key, "value": data.get("value", ""), "updated_at": datetime.now(timezone.utc).isoformat()})
+    return {"key": key, "value": data.get("value", "")}
+
+
+# ============== USER NOTES ==============
+
+@api_router.get("/user/notes")
+async def user_list_notes(request: Request):
+    user = await require_auth(request)
+    notes = await DB.select("app_notes", {"is_active": "eq.true"}, order="created_at.desc")
+    read_rows = await DB.select("user_read_notes", {"user_id": f"eq.{user['id']}"})
+    read_ids = {r["note_id"] for r in read_rows}
+    for n in notes:
+        n["is_read"] = n["id"] in read_ids
+    return notes
+
+@api_router.post("/user/notes/{note_id}/read")
+async def user_mark_note_read(note_id: str, request: Request):
+    user = await require_auth(request)
+    await DB.upsert("user_read_notes", {"user_id": user["id"], "note_id": note_id})
+    return {"message": "Nota segnata come letta"}
+
+
+# ============== CAMBIO PASSWORD ==============
+
+@api_router.post("/auth/change-password")
+async def change_password(data: dict, request: Request):
+    user = await require_auth(request)
+    current_password = data.get("current_password", "")
+    new_password = data.get("new_password", "")
+    if not current_password or not new_password:
+        raise HTTPException(400, "Password corrente e nuova sono obbligatorie")
+    if len(new_password) < 8:
+        raise HTTPException(400, "La nuova password deve essere di almeno 8 caratteri")
+    # Verifica password corrente
+    try:
+        await Auth.sign_in(user["email"], current_password)
+    except Exception:
+        raise HTTPException(401, "Password corrente non corretta")
+    # Aggiorna password
+    try:
+        await Auth.admin_update_user(user["id"], {"password": new_password})
+    except Exception as e:
+        raise HTTPException(500, f"Errore aggiornamento password: {str(e)}")
+    return {"message": "Password aggiornata con successo"}
+
+
 @api_router.put("/admin/users/{user_id}")
 async def update_user(user_id: str, update_data: UserUpdate, request: Request):
     await require_admin(request)
