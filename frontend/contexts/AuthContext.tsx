@@ -1,9 +1,17 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
-import { supabase } from '../lib/supabase';
+import { Platform, Alert } from 'react-native';
 import api from '../services/api';
 import { getDeviceId, getDeviceName } from '../utils/deviceId';
+import {
+  isBiometricAvailable,
+  isBiometricEnabled,
+  saveTokenSecurely,
+  clearStoredToken,
+  getStoredToken,
+  authenticateWithBiometric,
+  getBiometricType,
+} from '../hooks/useBiometric';
 
 interface User {
   user_id: string;
@@ -24,7 +32,12 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  biometricEnabled: boolean;
+  biometricAvailable: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithBiometric: () => Promise<boolean>;
+  enableBiometric: () => Promise<void>;
+  disableBiometric: () => Promise<void>;
   register: (email: string, name: string, password: string) => Promise<void>;
   loginWithGoogle: (googleData: { email: string; name?: string; picture?: string; id_token: string }) => Promise<void>;
   logout: () => Promise<void>;
@@ -33,7 +46,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Storage helper with localStorage fallback for web
 const storage = {
   async getItem(key: string): Promise<string | null> {
     try {
@@ -79,9 +91,16 @@ const storage = {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
 
   const checkAuth = useCallback(async () => {
     try {
+      const bioAvail = await isBiometricAvailable();
+      const bioEnabled = await isBiometricEnabled();
+      setBiometricAvailable(bioAvail);
+      setBiometricEnabled(bioEnabled && bioAvail);
+
       const storedToken = await storage.getItem('session_token');
       const storedUser = await storage.getItem('user_data');
 
@@ -90,11 +109,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // Restore user from local storage immediately
       const userData = JSON.parse(storedUser);
       setUser(userData);
 
-      // Verify token is still valid with backend
       try {
         const response = await api.get('/auth/me', {
           headers: { Authorization: `Bearer ${storedToken}` }
@@ -104,13 +121,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(fresh);
         await storage.setItem('user_data', JSON.stringify(fresh));
       } catch (verifyErr: any) {
-        // If 401 the token expired - clear session
         if (verifyErr?.response?.status === 401) {
           await storage.removeItem('session_token');
           await storage.removeItem('user_data');
           setUser(null);
         }
-        // Otherwise keep local data (network error, etc.)
       }
     } catch (error) {
       console.log('Auth check error:', error);
@@ -124,32 +139,111 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     checkAuth();
   }, [checkAuth]);
 
+  const _persistLogin = async (userData: any, token: string) => {
+    userData.user_id = userData.user_id || userData.id || '';
+    await storage.setItem('user_data', JSON.stringify(userData));
+    await storage.setItem('session_token', token);
+    // Aggiorna il token nel SecureStore se la biometria è abilitata
+    const bioEnabled = await isBiometricEnabled();
+    if (bioEnabled) {
+      await saveTokenSecurely(token);
+    }
+    setUser(userData);
+  };
+
   const login = async (email: string, password: string) => {
     const device_id = await getDeviceId();
     const device_name = getDeviceName();
     const response = await api.post('/auth/login', { email, password, device_id, device_name });
     const userData = response.data;
     const token = userData.session_token || userData.access_token || '';
+    await _persistLogin(userData, token);
 
-    userData.user_id = userData.user_id || userData.id || '';
+    // Dopo login riuscito: offri biometria se disponibile e non ancora abilitata
+    const bioAvail = await isBiometricAvailable();
+    setBiometricAvailable(bioAvail);
+    const bioEnabled = await isBiometricEnabled();
+    if (bioAvail && !bioEnabled) {
+      const bioType = await getBiometricType();
+      const label = bioType === 'face' ? 'Face ID' : 'impronta digitale';
+      setTimeout(() => {
+        Alert.alert(
+          `Abilita ${label}`,
+          `Vuoi usare ${label} per accedere più velocemente la prossima volta?`,
+          [
+            { text: 'Non ora', style: 'cancel' },
+            {
+              text: `Abilita`,
+              onPress: async () => {
+                await saveTokenSecurely(token);
+                setBiometricEnabled(true);
+              },
+            },
+          ]
+        );
+      }, 800);
+    }
+  };
 
-    await storage.setItem('user_data', JSON.stringify(userData));
-    await storage.setItem('session_token', token);
+  // Accesso tramite biometria: verifica il token salvato in SecureStore
+  const loginWithBiometric = async (): Promise<boolean> => {
+    try {
+      const bioType = await getBiometricType();
+      const label = bioType === 'face' ? 'Face ID' : 'impronta digitale';
+      const authenticated = await authenticateWithBiometric(`Accedi con ${label}`);
+      if (!authenticated) return false;
 
-    setUser(userData);
+      // Prova a usare il token salvato in SecureStore
+      const secureToken = await getStoredToken();
+      if (!secureToken) return false;
+
+      // Verifica che il token sia ancora valido
+      const response = await api.get('/auth/me', {
+        headers: { Authorization: `Bearer ${secureToken}` }
+      });
+      const userData = response.data;
+      userData.user_id = userData.user_id || userData.id || '';
+
+      await storage.setItem('user_data', JSON.stringify(userData));
+      await storage.setItem('session_token', secureToken);
+      setUser(userData);
+      return true;
+    } catch (e: any) {
+      if (e?.response?.status === 401) {
+        // Token scaduto: disabilita biometria e chiedi login manuale
+        await clearStoredToken();
+        setBiometricEnabled(false);
+      }
+      return false;
+    }
+  };
+
+  // Abilita biometria dal profilo: verifica con Face ID e salva il token attuale
+  const enableBiometric = async (): Promise<void> => {
+    const bioType = await getBiometricType();
+    const label = bioType === 'face' ? 'Face ID' : 'impronta digitale';
+    const authenticated = await authenticateWithBiometric(`Configura ${label} per OKNews24`);
+    if (!authenticated) {
+      Alert.alert('Autenticazione fallita', 'Non è stato possibile configurare la biometria.');
+      return;
+    }
+    const currentToken = await storage.getItem('session_token');
+    if (!currentToken) return;
+    await saveTokenSecurely(currentToken);
+    setBiometricEnabled(true);
+    Alert.alert('Biometria abilitata', `${label} è ora attivo per il login.`);
+  };
+
+  const disableBiometric = async (): Promise<void> => {
+    await clearStoredToken();
+    setBiometricEnabled(false);
   };
 
   const register = async (email: string, name: string, password: string) => {
     const response = await api.post('/auth/register', { email, name, password });
     const userData = response.data;
     const token = userData.session_token || userData.access_token || '';
-
-    userData.user_id = userData.user_id || userData.id || '';
-
-    await storage.setItem('user_data', JSON.stringify(userData));
-    await storage.setItem('session_token', token);
-
-    setUser(userData);
+    await _persistLogin(userData, token);
   };
 
   const loginWithGoogle = async (googleData: { email: string; name?: string; picture?: string; id_token: string }) => {
@@ -161,13 +255,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     const userData = response.data;
     const token = userData.session_token || userData.access_token || '';
-
-    userData.user_id = userData.user_id || userData.id || '';
-
-    await storage.setItem('user_data', JSON.stringify(userData));
-    await storage.setItem('session_token', token);
-
-    setUser(userData);
+    await _persistLogin(userData, token);
   };
 
   const logout = async () => {
@@ -183,6 +271,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       await storage.removeItem('session_token');
       await storage.removeItem('user_data');
+      // NON cancellare il token biometrico al logout: serve per il re-accesso rapido
       setUser(null);
     }
   };
@@ -219,7 +308,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isLoading,
         isAuthenticated: !!user,
+        biometricEnabled,
+        biometricAvailable,
         login,
+        loginWithBiometric,
+        enableBiometric,
+        disableBiometric,
         register,
         loginWithGoogle,
         logout,

@@ -23,7 +23,7 @@ const FREE_ARTICLES_LIMIT = 5;
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, biometricEnabled, biometricAvailable, disableBiometric, enableBiometric } = useAuth();
   const { mode, isDark, colors, setMode, toggleTheme } = useTheme();
   const [savedCount, setSavedCount] = useState(0);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
@@ -288,6 +288,58 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Account */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Account</Text>
+          <TouchableOpacity
+            style={[styles.menuItem, { backgroundColor: colors.card }]}
+            onPress={() => router.push('/note' as any)}
+          >
+            <Ionicons name="megaphone-outline" size={24} color={colors.textSecondary} />
+            <Text style={[styles.menuItemText, { color: colors.text }]}>Comunicazioni</Text>
+            <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.menuItem, { backgroundColor: colors.card }]}
+            onPress={() => router.push('/change-password' as any)}
+          >
+            <Ionicons name="lock-closed-outline" size={24} color={colors.textSecondary} />
+            <Text style={[styles.menuItemText, { color: colors.text }]}>Cambia Password</Text>
+            <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+          </TouchableOpacity>
+          {biometricAvailable && (
+            <View style={[styles.menuItem, { backgroundColor: colors.card }]}>
+              <Ionicons
+                name={biometricEnabled ? 'finger-print' : 'finger-print-outline'}
+                size={24}
+                color={biometricEnabled ? '#3B82F6' : colors.textSecondary}
+              />
+              <Text style={[styles.menuItemText, { color: colors.text, flex: 1 }]}>
+                Face ID / Impronta
+              </Text>
+              <Switch
+                value={biometricEnabled}
+                onValueChange={async (val) => {
+                  if (val) {
+                    await enableBiometric();
+                  } else {
+                    Alert.alert(
+                      'Disabilita biometria',
+                      'Vuoi rimuovere Face ID / Impronta dal login?',
+                      [
+                        { text: 'Annulla', style: 'cancel' },
+                        { text: 'Disabilita', style: 'destructive', onPress: disableBiometric },
+                      ]
+                    );
+                  }
+                }}
+                trackColor={{ false: '#D1D5DB', true: '#3B82F6' }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+          )}
+        </View>
+
         {/* Admin Menu */}
         {user?.role === 'admin' && (
           <View style={styles.section}>
@@ -306,6 +358,14 @@ export default function ProfileScreen() {
             >
               <Ionicons name="list-outline" size={24} color="#4B5563" />
               <Text style={styles.menuItemText}>Gestione Feed RSS</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => router.push('/admin/notes')}
+            >
+              <Ionicons name="megaphone-outline" size={24} color="#4B5563" />
+              <Text style={styles.menuItemText}>Comunicazioni App</Text>
               <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
             </TouchableOpacity>
             <TouchableOpacity
